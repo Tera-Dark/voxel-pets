@@ -1,0 +1,22 @@
+# Roblox / Rojo
+*.rbxl
+*.rbxlx
+*.rbxl.lock
+*.rbxlx.lock
+*.rbxm
+*.rbxmx
+sourcemap.json
+Packages/
+ServerPackages/
+DevPackages/
+wally.lock
+
+# Editors / OS
+.vscode/settings.json
+.idea/
+.DS_Store
+Thumbs.db
+
+# Local secrets (never commit tokens)
+.env
+*.token
