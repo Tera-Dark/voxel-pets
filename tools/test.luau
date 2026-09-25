@@ -558,11 +558,9 @@ do
 				local idx
 				if p.type == "Relic" then
 					idx = policy:chance(0.85) and policy:int(1, #p.offers) or 0
-				elseif p.type == "Event" then
-					idx = policy:int(1, 2)
 				elseif p.type == "Shop" then
 					idx = policy:chance(0.5) and 0 or policy:int(1, #p.items + 1)
-				elseif p.type == "Campfire" then
+				else -- Event / Campfire: two choices
 					idx = policy:int(1, 2)
 				end
 				local ok, err = Run.choose(run, idx)
