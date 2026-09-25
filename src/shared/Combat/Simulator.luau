@@ -96,6 +96,10 @@ function Simulator.run(options)
 		if not target.alive then
 			return
 		end
+		if target.mods.immuneControl and (id == "Root" or id == "Blind") then
+			emit("Immune", { dst = target.uid, status = id })
+			return
+		end
 		local def = StatusEffects[id]
 		local inst = target.statuses[id]
 		if inst then

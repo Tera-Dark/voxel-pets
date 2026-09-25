@@ -1,3 +1,4 @@
 std = "roblox"
+exclude = ["src/server/Vendor/**"]
 [lints]
 shadowing = "allow"

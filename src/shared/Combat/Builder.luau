@@ -28,6 +28,7 @@ local function defaultMods()
 		reviveOnce = false,
 		executioner = false,
 		hardening = false,
+		immuneControl = false,
 	}
 end
 
@@ -52,6 +53,12 @@ local PASSIVES = {
 	end,
 	DeepShield = function(c)
 		c.mods.startShieldPct = 0.10
+	end,
+	VoidScales = function(c)
+		c.maxHp = math.floor(c.maxHp * 1.2)
+		c.atk = math.floor(c.atk * 1.2)
+		c.def = math.floor(c.def * 1.2)
+		c.mods.immuneControl = true
 	end,
 }
 
@@ -96,13 +103,19 @@ local function applyRelic(c, relic)
 end
 
 -- instance: { petId, level?, stars?, evolution?, variant? }
--- opts: { side = "A"|"B", slot = 1..5, relics = { relicId }, extraMult = number?, displayName = string? }
+-- opts: {
+--   side = "A"|"B", slot = 1..5, relics = { relicId }, displayName = string?,
+--   extraMult = number?      -- PvE zone/stage scaling (enemies)
+--   globalMult = number?     -- out-of-run account bonuses (codex, prestige) applied to HP/ATK/DEF
+--   hpFraction = number?     -- start below full HP (expedition carry-over)
+--   elementOverride = string? (balance tooling only)
+-- }
 function Builder.build(instance, opts)
 	local def = Pets[instance.petId]
 	assert(def, "unknown pet " .. tostring(instance.petId))
 	opts = opts or {}
 	local side, slot = opts.side or "A", opts.slot or 1
-	local stats = Formulas.finalStats(def, instance, opts.extraMult)
+	local stats = Formulas.finalStats(def, instance, (opts.extraMult or 1) * (opts.globalMult or 1))
 
 	local c = {
 		uid = side .. slot,
@@ -152,8 +165,10 @@ function Builder.build(instance, opts)
 
 	c.baseDef = c.def
 	c.maxHp = math.max(1, c.maxHp)
-	c.hp = c.maxHp
+	c.hp = math.max(1, math.floor(c.maxHp * math.clamp(opts.hpFraction or 1, 0.01, 1)))
 	c.power = Formulas.power({ hp = c.maxHp, atk = c.atk, def = c.def, spd = c.spd })
+	c.rarity = def.rarity
+	c.variant = instance.variant or "Normal"
 	return c
 end
 

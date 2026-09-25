@@ -77,6 +77,72 @@ local Skills = {
 			{ type = "Damage", mult = 1.2 },
 		},
 	},
+	-- Roster skills (MVP)
+	TidalSlam = {
+		displayName = "Tidal Slam",
+		description = "Slam for 200% damage and Chill the target.",
+		cooldown = 9,
+		trigger = { kind = "Ready" },
+		effects = {
+			{ type = "Damage", mult = 2.0 },
+			{ type = "Status", status = "Chill", target = "Enemy" },
+		},
+	},
+	EmberBreath = {
+		displayName = "Ember Breath",
+		description = "Breathe fire for 150% damage and apply 1 Burn.",
+		cooldown = 7,
+		trigger = { kind = "Ready" },
+		effects = {
+			{ type = "Damage", mult = 1.5 },
+			{ type = "Status", status = "Burn", target = "Enemy", stacks = 1 },
+		},
+	},
+	SunFlare = {
+		displayName = "Sun Flare",
+		description = "Flash for 180% damage and Blind the target.",
+		cooldown = 9,
+		trigger = { kind = "Ready" },
+		effects = {
+			{ type = "Damage", mult = 1.8 },
+			{ type = "Status", status = "Blind", target = "Enemy" },
+		},
+	},
+	VoidRend = {
+		displayName = "Void Rend",
+		description = "Tear for 260% damage. Prefers wounded targets.",
+		cooldown = 9,
+		trigger = { kind = "TargetHpBelow", value = 0.5, maxWait = 5 },
+		effects = { { type = "Damage", mult = 2.6 } },
+	},
+	StoneWall = {
+		displayName = "Stone Wall",
+		description = "Gain a shield equal to 20% max HP.",
+		cooldown = 11,
+		trigger = { kind = "SelfHpBelow", value = 0.7, maxWait = 6 },
+		effects = { { type = "Shield", pctMaxHp = 0.2 } },
+	},
+	SporeCloud = {
+		displayName = "Spore Cloud",
+		description = "Blind the target and gain Regen.",
+		cooldown = 10,
+		trigger = { kind = "Ready" },
+		effects = {
+			{ type = "Status", status = "Blind", target = "Enemy" },
+			{ type = "Status", status = "Regen", target = "Self" },
+		},
+	},
+	BossQuake = {
+		displayName = "Boss Quake",
+		description = "Charges for 1.5s, then quakes for 250% damage and Roots the target. Can be interrupted.",
+		cooldown = 9,
+		castTime = 1.5,
+		trigger = { kind = "Ready" },
+		effects = {
+			{ type = "Damage", mult = 2.5 },
+			{ type = "Status", status = "Root", target = "Enemy" },
+		},
+	},
 	-- Enemy skills
 	WildCharge = {
 		displayName = "Wild Charge",

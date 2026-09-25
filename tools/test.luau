@@ -12,6 +12,20 @@ local Constants = require("../src/shared/Config/Constants")
 local Rng = require("../src/shared/Combat/Rng")
 local Builder = require("../src/shared/Combat/Builder")
 local Simulator = require("../src/shared/Combat/Simulator")
+local Stages = require("../src/shared/Config/Stages")
+local Eggs = require("../src/shared/Config/Eggs")
+local Camp = require("../src/shared/Config/Camp")
+local Talents = require("../src/shared/Config/Talents")
+local Quests = require("../src/shared/Config/Quests")
+local Prestige = require("../src/shared/Config/Prestige")
+local MapGen = require("../src/shared/Expedition/MapGen")
+local RelicPool = require("../src/shared/Expedition/RelicPool")
+local Events = require("../src/shared/Expedition/Events")
+local PetInstance = require("../src/shared/Progression/PetInstance")
+local Hatch = require("../src/shared/Progression/Hatch")
+local Codex = require("../src/shared/Progression/Codex")
+local DataTemplate = require("../src/shared/DataTemplate")
+local Network = require("../src/shared/Network")
 
 local failures, passes = 0, 0
 local function check(cond, msg)
@@ -272,6 +286,291 @@ do
 		})
 	end)
 	check(ok, "multi-slot (2v2) simulation runs")
+end
+
+print("stages")
+do
+	for _, z in Stages.Zones do
+		check(Pets[z.elite] ~= nil and Pets[z.boss] ~= nil, "zone " .. z.id .. " elite/boss exist")
+		for _, id in z.pool do
+			check(Pets[id] ~= nil, "zone " .. z.id .. " pool pet " .. id .. " exists")
+		end
+		for stage = 1, Stages.STAGES_PER_ZONE do
+			local enemy, kind = Stages.enemyFor(z.id, stage)
+			check(Pets[enemy] ~= nil, "enemy exists " .. z.id .. "-" .. stage)
+			if stage == 10 then
+				check(kind == "Boss", "stage 10 is boss")
+			elseif stage == 5 then
+				check(kind == "Elite", "stage 5 is elite")
+			end
+		end
+	end
+	local r1, r10 = Stages.rewards(1, 1), Stages.rewards(1, 10)
+	check(r1.coins == 20 and r1.xp == 15, "zone1 stage1 rewards 20c/15xp")
+	check(r10.coins > r1.coins * 5, "boss rewards scale")
+	check(r10.firstClearGems == 25, "boss first clear 25 gems")
+	local data = {}
+	check(Stages.isStageUnlocked(1, 1, data), "1-1 unlocked initially")
+	check(not Stages.isStageUnlocked(1, 2, data), "1-2 locked initially")
+	check(not Stages.isZoneUnlocked(2, data), "zone 2 locked initially")
+	data["1-10"] = 1
+	check(Stages.isZoneUnlocked(2, data), "zone 2 unlocked after 1-10")
+	check(Stages.starsFor({ winner = "A", duration = 20 }, 0.8) == 3, "3 stars fast+healthy")
+	check(Stages.starsFor({ winner = "A", duration = 50 }, 0.2) == 1, "1 star slow+low")
+	check(Stages.starsFor({ winner = "B", duration = 10 }, 1) == 0, "0 stars on loss")
+end
+
+print("eggs + hatch")
+do
+	for eggId, egg in Eggs do
+		check(Rarities.EggOdds[eggId] ~= nil, eggId .. " has odds")
+		for rarity, pool in egg.pool do
+			for _, petId in pool do
+				check(Pets[petId] ~= nil, eggId .. " pool pet exists " .. petId)
+				check(
+					Pets[petId].rarity == rarity,
+					eggId .. " " .. petId .. " listed under its rarity " .. rarity
+				)
+				check(
+					not Pets[petId].expeditionOnly or eggId == "PremiumEgg",
+					petId .. " expedition-only not in zone egg"
+				)
+			end
+		end
+		for rarity, p in Rarities.EggOdds[eggId] do
+			check(
+				p == 0 or (egg.pool[rarity] and #egg.pool[rarity] > 0),
+				eggId .. " has pool for " .. rarity
+			)
+		end
+		local rows, byRarity, sum = Hatch.disclosure(eggId, 0)
+		check(near(sum, 1, 1e-6), eggId .. " disclosure sums to 100% (" .. sum .. ")")
+		check(
+			#rows > 0 and byRarity.Common ~= nil or eggId == "PremiumEgg",
+			eggId .. " disclosure rows"
+		)
+		local rowsL, _, sumL = Hatch.disclosure(eggId, 0.5)
+		check(near(sumL, 1, 1e-6), eggId .. " lucky disclosure sums to 100%")
+		check(#rowsL == #rows, "luck does not change outcome list")
+	end
+	local base = Rarities.EggOdds.MeadowEgg
+	local lucky = Hatch.oddsWithLuck(base, 1.0)
+	check(near(lucky.Rare, base.Rare * 2), "luck 1.0 doubles Rare")
+	check(lucky.Common < base.Common, "luck takes mass from Common")
+	local rng = Rng.new(7)
+	local counts, mismatches = {}, 0
+	for _ = 1, 20000 do
+		local petId, rarity = Hatch.roll(rng, "MeadowEgg", 0)
+		if Pets[petId].rarity ~= rarity then
+			mismatches += 1
+		end
+		counts[rarity] = (counts[rarity] or 0) + 1
+	end
+	check(mismatches == 0, "rolled pet rarity always matches rolled rarity")
+	check(
+		math.abs(counts.Common / 20000 - 0.55) < 0.02,
+		"empirical Common ~55%: " .. counts.Common / 20000
+	)
+	check(math.abs((counts.Rare or 0) / 20000 - 0.12) < 0.015, "empirical Rare ~12%")
+	local prem = Hatch.roll(Rng.new(1), "PremiumEgg", 0)
+	check(
+		Rarities.StatMult[Pets[prem].rarity] >= Rarities.StatMult.Rare,
+		"premium egg never below Rare"
+	)
+end
+
+print("camp")
+do
+	check(
+		Camp.slots("Mine", 1) == 3 and Camp.slots("Mine", 6) == 4,
+		"mine slots grow every 5 levels"
+	)
+	check(Camp.slots("Mine", 200) == 10, "mine slots capped")
+	local rateFire = Camp.workerRate("Mine", 1, { power = 100, element = "Fire" })
+	local rateGrass = Camp.workerRate("Mine", 1, { power = 100, element = "Grass" })
+	check(near(rateFire, rateGrass * 1.25), "affinity +25%")
+	check(
+		near(Camp.workerRate("Mine", 2, { power = 100, element = "Grass" }), rateGrass * 1.15),
+		"level mult 1.15"
+	)
+	check(
+		Camp.upgradeCost("Mine", 1) == 200 and Camp.upgradeCost("Mine", 2) == 250,
+		"upgrade cost curve"
+	)
+	check(
+		Camp.isUnlocked("Mine", {}) and not Camp.isUnlocked("Orchard", {}),
+		"orchard locked at start"
+	)
+	check(Camp.isUnlocked("Orchard", { stagesCleared = 5 }), "orchard unlock at 5 stages")
+	local hourly = rateGrass * 3600
+	check(hourly > 50 and hourly < 5000, "1 worker (power 100) hourly coins sane: " .. hourly)
+end
+
+print("talents")
+do
+	check(#Talents.Nodes == 15, "15 talent nodes")
+	local owned = {}
+	local ok, err = Talents.canBuy("E2", owned, 999)
+	check(not ok and err == "requires E1", "prereq enforced")
+	check(Talents.canBuy("E1", owned, 30), "E1 affordable at 30")
+	check(not Talents.canBuy("E1", owned, 29), "E1 unaffordable at 29")
+	owned.E1 = true
+	check(not Talents.canBuy("E1", owned, 999), "no double buy")
+	owned.S1, owned.S3, owned.A2 = true, true, true
+	local e = Talents.effects(owned)
+	check(
+		e.startRelics == 1
+			and near(e.hpMult, 1.1)
+			and near(e.atkMult, 1.1)
+			and near(e.marksMult, 1.2),
+		"effects fold"
+	)
+	check(e.secondWind == false, "unowned bool stays false")
+end
+
+print("quests + prestige")
+do
+	check(#Quests.Daily == 6, "6 dailies")
+	for _, q in Quests.Daily do
+		check(q.goal > 0 and (q.reward.coins or q.reward.gems), q.id .. " valid")
+	end
+	check(#Quests.dateKey(0) == 10, "date key format")
+	check(not Prestige.canPrestige({ ["2-10"] = 3 }), "no prestige before zone 3 boss")
+	check(Prestige.canPrestige({ ["3-10"] = 1 }), "prestige after zone 3 boss")
+	check(Prestige.furthestIndex({ ["1-3"] = 1, ["2-4"] = 2, ["1-9"] = 0 }) == 14, "furthest index")
+	local pts = Prestige.pointsFor(30, 0)
+	check(pts >= 2 and pts <= 6, "prestige points at stage 30: " .. pts)
+	check(
+		near(Prestige.productionMult(5), 1.4) and near(Prestige.petStatMult(5), 1.15),
+		"prestige mults"
+	)
+end
+
+print("expedition map")
+do
+	for seed = 1, 200 do
+		for floor = 1, 2 do
+			local map = MapGen.generate(seed, floor, { extraTreasure = seed % 2 })
+			local ok, err = MapGen.validate(map)
+			check(ok, "map valid seed " .. seed .. " floor " .. floor .. ": " .. tostring(err))
+			check(map.nodes[map.columns[9][1].id].kind == "Campfire", "column 9 campfire")
+			for _, node in map.nodes do
+				if node.enemy then
+					check(Pets[node.enemy] ~= nil, "map enemy exists")
+				end
+			end
+		end
+	end
+	local a, b = MapGen.generate(42, 1), MapGen.generate(42, 1)
+	local same = true
+	for id, n in a.nodes do
+		if b.nodes[id].kind ~= n.kind or b.nodes[id].enemy ~= n.enemy then
+			same = false
+		end
+	end
+	check(same, "map generation deterministic")
+	check(MapGen.generate(42, 1).nodes[2].kind ~= nil, "nodes indexable")
+	-- relics
+	local rng = Rng.new(5)
+	local offer = RelicPool.offer(rng, { count = 3, owned = {} })
+	check(#offer == 3, "3 relics offered")
+	check(offer[1] ~= offer[2] and offer[2] ~= offer[3] and offer[1] ~= offer[3], "offers distinct")
+	local allOwned = {}
+	for id, def in Relics do
+		if type(def) == "table" and def.rarity then
+			allOwned[id] = true
+		end
+	end
+	check(
+		#RelicPool.offer(Rng.new(1), { count = 3, owned = allOwned }) == 3,
+		"offers even when all owned"
+	)
+	local legOnly = RelicPool.offer(Rng.new(2), { count = 3, minRarity = "Legendary" })
+	for _, id in legOnly do
+		check(Relics[id].rarity == "Legendary", "minRarity Legendary respected")
+	end
+	check(
+		RelicPool.price("InsightLens", 0.2) == math.floor(RelicPool.price("InsightLens") * 0.8),
+		"shop discount"
+	)
+	-- events
+	check(#Events.List == 6, "6 events")
+	for _, e in Events.List do
+		check(#e.choices == 2, e.id .. " has 2 choices")
+	end
+	check(Events.pick(Rng.new(3), { CubeAltar = true }).id ~= nil, "event pick")
+end
+
+print("pet instance")
+do
+	local inst = PetInstance.new("Emberfox", "u1", 0)
+	check(inst.level == 1 and inst.variant == "Normal", "new instance defaults")
+	local gained = PetInstance.addXp(inst, Formulas.xpForLevel(1) + Formulas.xpForLevel(2))
+	check(gained == 2 and inst.level == 3 and inst.xp == 0, "xp levels up twice")
+	PetInstance.addXp(inst, 1e9)
+	check(inst.level == 30, "capped at evolution 1 cap (30)")
+	check(not PetInstance.canLevelUp(inst), "cannot buy level at cap")
+	check(PetInstance.canEvolve(inst), "can evolve at cap")
+	check(PetInstance.evolveCost(inst).essence == 10, "evolve cost stage 1")
+	inst.evolution = 2
+	check(PetInstance.levelCap(inst) == 60, "cap 60 after evolve")
+	check(
+		PetInstance.levelUpCost(inst) > PetInstance.levelUpCost(PetInstance.new("Emberfox", "x", 0)),
+		"cost grows"
+	)
+	local common = PetInstance.new("GrassSlime", "c", 0)
+	check(
+		PetInstance.levelUpCost(common)
+			< PetInstance.levelUpCost(PetInstance.new("Emberfox", "x", 0)),
+		"common cheaper"
+	)
+	check(PetInstance.dismantleValue(common).shards == 5, "common dismantle 5 shards")
+	local five = {}
+	for i = 1, 5 do
+		five[i] = PetInstance.new("GrassSlime", "g" .. i, 0)
+	end
+	five[3].level = 9
+	check(PetInstance.canFuse(five), "5 same commons fuse")
+	local fused = PetInstance.fuseResult(five, "new", 0)
+	check(fused.variant == "Golden" and fused.level == 9, "fusion -> Golden keeps best level")
+	five[5].petId = "Hopcube"
+	check(not PetInstance.canFuse(five), "mixed species cannot fuse")
+	check(PetInstance.power(inst) > 0, "power computed")
+	check(PetInstance.power(inst, 1.1) > PetInstance.power(inst), "global mult raises power")
+end
+
+print("codex")
+do
+	local codex = {}
+	check(Codex.register(codex, "Emberfox"), "register new")
+	check(not Codex.register(codex, "Emberfox"), "no double register")
+	check(Codex.register(codex, "Emberfox", "Golden"), "register variant")
+	local s = Codex.summary(codex)
+	check(s.species == 1 and s.variants == 1 and s.totalSpecies == 34, "summary counts")
+	check(near(Codex.bonusMult(codex), 1.005), "bonus 0.3% + 0.2%")
+	for _, id in Codex.zoneSpecies(1) do
+		Codex.register(codex, id)
+	end
+	check(Codex.isZoneComplete(codex, 1), "zone 1 complete")
+	check(Codex.bonusMult(codex) > 1.03, "zone bonus applied")
+end
+
+print("data + network")
+do
+	check(DataTemplate.schemaVersion == 1, "schema v1")
+	for _, key in DataTemplate.PUBLIC_KEYS do
+		check(DataTemplate[key] ~= nil, "public key exists in template: " .. key)
+	end
+	local seen = {}
+	for _, name in Network.Functions do
+		check(not seen[name], "unique remote " .. name)
+		seen[name] = true
+	end
+	for _, name in Network.Events do
+		check(not seen[name], "unique remote " .. name)
+		seen[name] = true
+	end
+	check(#Network.Functions >= 30, "function list complete")
 end
 
 print(string.format("\n%d passed, %d failed", passes, failures))
