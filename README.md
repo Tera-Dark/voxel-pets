@@ -1,11 +1,13 @@
 # 方块灵宠：无尽远征 · Voxel Pets: Endless Expedition
 
-> Roblox 3D 体素风宠物收集对战游戏 —— PvE 推图 · Rogue 远征 · PvP 竞技 · 放置增量 · 全维收集
+> Roblox 3D 体素风宠物收集对战游戏 —— 全自动战斗 · PvE 推图 · Rogue 远征 · PvP 竞技 · 放置增量 · 全维收集
+>
+> 核心原则：**决策在战前，爽感在战中** —— 玩家只通过「局外养成」与「局内 Rogue 加成」影响胜负。
 
 | 项目 | 状态 |
 |---|---|
-| 当前阶段 | **立项评估**（PRD v0.1 已完成，概念图审核中） |
-| 下一里程碑 | P0 概念验证原型（灰盒战斗 + 孵蛋 + 矿场产币，3 周） |
+| 当前阶段 | **立项评估**（PRD v0.2；美术方向与核心战斗形态已由项目所有者拍板） |
+| 下一里程碑 | P0 概念验证（全自动 1v1 战斗 + 确定性模拟器 + 灰盒 Rogue + 孵蛋 + 矿场，3 周） |
 | 引擎 / 语言 | Roblox Studio · Luau · Rojo |
 | 目标平台 | Roblox 全平台，移动端优先 |
 
@@ -13,7 +15,7 @@
 
 | 文档 | 说明 |
 |---|---|
-| [docs/PRD/PRD_v0.1.md](docs/PRD/PRD_v0.1.md) | 产品需求文档（完整设计） |
+| [docs/PRD/PRD.md](docs/PRD/PRD.md) | 产品需求文档（living doc，当前 v0.2） |
 | [docs/DEVLOG.md](docs/DEVLOG.md) | **开发推进日志**（按日期记录每一步进展） |
 | [docs/ROADMAP.md](docs/ROADMAP.md) | 里程碑与任务清单（P0 → P4） |
 | [docs/DECISIONS.md](docs/DECISIONS.md) | 设计 / 技术决策记录 |

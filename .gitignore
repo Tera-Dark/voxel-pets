@@ -20,3 +20,6 @@ Thumbs.db
 # Local secrets (never commit tokens)
 .env
 *.token
+
+# 概念图只保留压缩后的 JPG（PNG 原图由 scripts/optimize_images.py 转换后删除）
+docs/concept-art/*.png
