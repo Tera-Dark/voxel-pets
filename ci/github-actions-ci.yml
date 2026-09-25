@@ -1,0 +1,33 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  check:
+    name: format · lint · tests · balance snapshot
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Roblox toolchain (lune / stylua / selene / rojo / wally)
+        run: |
+          ./scripts/install_tools.sh "$HOME/bin"
+          echo "$HOME/bin" >> "$GITHUB_PATH"
+
+      - name: Format check (StyLua)
+        run: stylua --check src tools
+
+      - name: Lint (Selene)
+        run: selene src
+
+      - name: Tests (Lune)
+        run: lune run tools/test
+
+      - name: Rojo build (validates project tree)
+        run: rojo build default.project.json -o /tmp/VoxelPets.rbxl
+
+      - name: Balance snapshot (quick)
+        run: lune run tools/sim_batch -- --quick
