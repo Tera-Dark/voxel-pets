@@ -4,6 +4,37 @@
 
 ---
 
+## 2026-09-25 · Day 1 · P0 开工：工程化 + 确定性战斗模拟器
+
+**阶段**：P0 概念验证　**状态**：进行中（模拟器与配表完成，Roblox 端播放/UI 未开始）
+
+### 项目所有者新增决定
+- 游戏内文本 **全英文**；UI **像素风**（与体素世界统一）。
+
+### 完成
+- [x] GitHub 远端接入并推送（`Tera-Dark/voxel-pets`），后续每次推进自动 push。
+- [x] 工程化：`rokit.toml`（工具版本锁定）、`stylua.toml`、`selene.toml`、`.luaurc`、`scripts/install_tools.sh`（本地 / CI 共用）、GitHub Actions CI（格式 → lint → 测试 → Rojo 构建 → 平衡快照）。
+- [x] 共享配表 `src/shared/Config/`：Constants / Elements / Rarities（含蛋概率与校验）/ StatusEffects（8 种）/ Skills（9 个，带自动触发条件）/ Pets（3 初始 + 4 图鉴 + 6 野怪）/ Relics（15 个）/ Formulas。
+- [x] 战斗核心 `src/shared/Combat/`：`Rng`（xorshift32，跨平台确定性）、`Builder`（养成 + 遗物 → 战斗单位，支持 `team[1..5]`）、`Simulator`（0.1 s tick、自动施法 AI 四类触发、蓄力/打断、8 状态、护盾、复活、狂暴、事件序列输出）。
+- [x] 工具 `tools/`：`test.luau`（108 项断言：配表校验 / 元素 / 公式 / RNG / 确定性 / 500 场随机不变量 / 机制）、`sim_replay`、`sim_batch`、`tune_roles`。
+- [x] 三轮数值调参（详见 `docs/BALANCE.md`）：修复 +HP 遗物无效 bug；发现并修复"攻击 > 坦克 > 辅助 100%"的职业失衡；元素 1.3/0.77；减伤公式改为攻方 ATK 相对制；加入狂暴机制。
+
+### 关键设计结论（写回 PRD v0.3）
+- 减伤公式改为 `DEF / (DEF + 1.5 × 攻方ATK)`：尺度无关，双方同倍放大不改变战斗形态（原按等级的公式在高稀有度下会让 DEF 溢出）。
+- 自动战斗方差低，稳定的小优势会被放大成大胜率 → 元素倍率必须温和（1.3/0.77），"被克必败"只能靠**节点预告 + 遗物**缓解，D-12 保留观察。
+- 狂暴开始时间是强敏感参数（25 s → 20 s 让攻击 vs 坦克从 50% 跳到 76%）。
+
+### 问题 / 风险
+- 代码使用 Luau **字符串相对 require**（`require("./Rng")`）以便 Roblox 与 Lune 共用；需在 Studio 里验证当前 Roblox 版本对字符串 require 的支持（若不支持，改为 `script.Parent` 并给 Lune 写一层适配）。
+- 仍未在 Roblox Studio 中运行过——P0 下一步就是把模拟器接进服务端并做客户端播放。
+
+### 下一步（P0 剩余）
+1. Roblox 端：服务端 `BattleService`（调用 Simulator → 下发事件序列）、客户端 `BattlePlayback`（伤害数字、状态图标、蓄力条、1×/2×、跳过）、灰盒 32 格灵宠占位模型。
+2. 灰盒 Rogue：1 层 10 节点、三选一、节点元素预告。
+3. 孵蛋（含概率展示）、矿场产币、ProfileStore 存档。
+
+---
+
 ## 2026-09-25 · Day 0（下午）· 项目所有者反馈落地
 
 **阶段**：立项评估　**状态**：文档更新完成，等待推送凭证
