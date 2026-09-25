@@ -14,9 +14,10 @@ local DataTemplate = {
 	marks = 0, -- expedition talent currency
 	medals = 0, -- arena currency (post-MVP shop)
 	tickets = 3, -- expedition entries
-	luck = 0, -- active hatch luck (0 = none); numeric, displayed in odds
+	luck = 0, -- luck boost per hatch from consumables (e.g. 0.5 = Rare+ odds x1.5); numeric, shown in odds
+	luckCharges = 0, -- hatches remaining on the boost
 
-	-- Pets: pets[uid] = PetInstance ; team[slot] = uid
+	-- Pets: pets[uid] = PetInstance ; team[tostring(slot)] = uid  (string keys keep sparse slots DataStore-safe)
 	pets = {},
 	team = {},
 	nextUid = 1,
@@ -97,6 +98,7 @@ DataTemplate.PUBLIC_KEYS = {
 	"medals",
 	"tickets",
 	"luck",
+	"luckCharges",
 	"pets",
 	"team",
 	"stages",

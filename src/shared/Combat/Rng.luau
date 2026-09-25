@@ -21,6 +21,15 @@ function Rng.new(seed: number?)
 	return self
 end
 
+-- Resume a generator from a previously saved `state` (e.g. an expedition run stored in a profile).
+function Rng.fromState(state: number)
+	local s = bit32.band(math.floor(state), 0xFFFFFFFF)
+	if s == 0 then
+		s = 1
+	end
+	return setmetatable({ state = s }, Rng)
+end
+
 function Rng:nextUint32(): number
 	local x = self.state
 	x = bit32.bxor(x, bit32.lshift(x, 13))

@@ -29,10 +29,11 @@ local Constants = {
 	EVOLUTION_LEVEL_CAP = { 30, 60, 100 },
 
 	-- PvE scaling
-	ZONE_STAT_MULT = 2.5,
-	STAGE_STAT_MULT = 1.08,
+	ZONE_STAT_MULT = 2.0, -- 2.5 -> 2.0 (2026-09-26 pve_curve pass: zone walls were 2x the in-zone growth)
+	STAGE_STAT_MULT = 1.10, -- 1.08 -> 1.10
 	WILD_STAT_MULT = 1.4, -- wild pets are mostly Common; this keeps them relevant vs Rare starters
 	ELITE_STAT_MULT = 1.0, -- elites get their edge from skills + HP overrides, not raw stat inflation
+	BOSS_STAT_MULT = 1.0, -- bosses: Common rarity + HP override + Hardening/BossQuake + this
 	STAGES_PER_ZONE = 10,
 }
 

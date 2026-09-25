@@ -104,7 +104,7 @@ end
 
 -- instance: { petId, level?, stars?, evolution?, variant? }
 -- opts: {
---   side = "A"|"B", slot = 1..5, relics = { relicId }, displayName = string?,
+--   side = "A"|"B", slot = 1..5, relics = { relicId }, displayName = string?, bonuses = table?,
 --   extraMult = number?      -- PvE zone/stage scaling (enemies)
 --   globalMult = number?     -- out-of-run account bonuses (codex, prestige) applied to HP/ATK/DEF
 --   hpFraction = number?     -- start below full HP (expedition carry-over)
@@ -163,6 +163,15 @@ function Builder.build(instance, opts)
 		table.insert(c.relics, relicId)
 	end
 
+	-- Run-scoped bonuses (expedition talents / event auras): { atkMult, hpMult, defMult, startShieldPct }
+	if opts.bonuses then
+		local b = opts.bonuses
+		c.atk = math.floor(c.atk * (b.atkMult or 1))
+		c.def = math.floor(c.def * (b.defMult or 1))
+		c.maxHp = math.floor(c.maxHp * (b.hpMult or 1))
+		c.mods.startShieldPct += b.startShieldPct or 0
+	end
+
 	c.baseDef = c.def
 	c.maxHp = math.max(1, c.maxHp)
 	c.hp = math.max(1, math.floor(c.maxHp * math.clamp(opts.hpFraction or 1, 0.01, 1)))
@@ -178,7 +187,8 @@ function Builder.buildEnemy(petId: string, zone: number, stage: number, opts)
 	opts.side = opts.side or "B"
 	local def = Pets[petId]
 	local eliteMult = (def and def.elite) and Constants.ELITE_STAT_MULT or 1
-	opts.extraMult = Formulas.enemyScale(zone, stage) * eliteMult * (opts.extraMult or 1)
+	local bossMult = (def and def.boss) and Constants.BOSS_STAT_MULT or 1
+	opts.extraMult = Formulas.enemyScale(zone, stage) * eliteMult * bossMult * (opts.extraMult or 1)
 	local level = (zone - 1) * 10 + stage
 	return Builder.build({ petId = petId, level = level }, opts)
 end

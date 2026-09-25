@@ -110,10 +110,10 @@ local Skills = {
 	},
 	VoidRend = {
 		displayName = "Void Rend",
-		description = "Tear for 260% damage. Prefers wounded targets.",
-		cooldown = 9,
+		description = "Tear for 220% damage. Prefers wounded targets.",
+		cooldown = 10,
 		trigger = { kind = "TargetHpBelow", value = 0.5, maxWait = 5 },
-		effects = { { type = "Damage", mult = 2.6 } },
+		effects = { { type = "Damage", mult = 2.2 } },
 	},
 	StoneWall = {
 		displayName = "Stone Wall",
@@ -134,12 +134,12 @@ local Skills = {
 	},
 	BossQuake = {
 		displayName = "Boss Quake",
-		description = "Charges for 1.5s, then quakes for 250% damage and Roots the target. Can be interrupted.",
-		cooldown = 9,
+		description = "Charges for 1.5s, then quakes for 200% damage and Roots the target. Can be interrupted.",
+		cooldown = 10,
 		castTime = 1.5,
 		trigger = { kind = "Ready" },
 		effects = {
-			{ type = "Damage", mult = 2.5 },
+			{ type = "Damage", mult = 2.0 },
 			{ type = "Status", status = "Root", target = "Enemy" },
 		},
 	},

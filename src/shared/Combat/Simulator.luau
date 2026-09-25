@@ -183,7 +183,7 @@ function Simulator.run(options)
 		local steps = math.floor((1 - c.hp / c.maxHp) * 10)
 		if steps > c.hardeningSteps then
 			c.hardeningSteps = steps
-			c.def = math.floor(c.baseDef * (1 + 0.08 * steps))
+			c.def = math.floor(c.baseDef * (1 + 0.04 * steps))
 		end
 	end
 
