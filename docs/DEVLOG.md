@@ -4,6 +4,33 @@
 
 ---
 
+## 2026-09-26 · Day 2 · MVP 代码全量落地（共享层 / 服务端 / 客户端）
+
+**阶段**：P2 MVP（代码完成，等待 Studio 实机验证）　**状态**：PRD §13.1 MVP 范围的全部系统已实现并通过本地门禁；**Roblox 运行时尚未实机跑过**（仅通过 Lune + Roblox API Mock 冒烟）。
+
+### 完成
+- **共享层**（`src/shared`，约 3.7k 行，纯 Luau、Lune 可跑）：34 只灵宠 / 16 技能 / 15 遗物 / 15 元天赋 / 6 远征事件 / 3 区 × 10 关 / 4 种蛋（含全部数值概率表）/ 营地三建筑 / 6 日常任务 / 轮回；远征地图生成（10 列 × 3 道分支）与 `Run` 状态机（移动 / 战斗 / 遗物三选一 / 事件 / 商店 / 篝火 / 弃局 / 结算）；养成规则 `PetInstance`（升级 / 进化 / 升星 / 融合 / 分解）；图鉴加成；数据模板。
+- **服务端**（`src/server`，约 2.7k 行）：13 个服务（Data / Economy / Pet / Hatch / Battle / Stage / Expedition / Camp / Quest / Prestige / Announcement / Monetization / Arena）+ `WorldBuilder` 灰盒枢纽（9 个站点 ProximityPrompt）；ProfileStore 存档（vendored）；39 个远程接口统一 `ok, err, payload` 约定 + 类型校验 + 限流；货币只经 EconomyService；异步竞技场用 MemoryStore（按战力 / 按评分两张表，机器人补位，Elo K=32）；全服公告走 MessagingService；商业化：3 通行证 / 3 钻石包 / 4 钻石商品 / 7 日签到 / PolicyService 分流 / 幂等 ProcessReceipt。
+- **客户端**（`src/client`，约 5.0k 行）：像素风组件库（`PixelTheme` + `Components`：面板 / 按钮 / 进度条 / 模态 / Toast / 确认框）；12 个界面（HUD、Battle 回放 1×/2×/3× + Skip + 结算、Pets、Hatch 含完整概率披露弹窗、Stages、Camp、Expedition、Arena、Codex、Quests + 签到、Shop、Prestige）；程序化体素灵宠模型（`PetModelFactory`，按 petId 哈希配色 + 稀有度形态变化）；战斗舞台事件回放（`BattleStage`，(0,300,0) 独立舞台 + 镜头接管）；跟随宠物 `Companion`。
+- **测试 / 工具**：`lune run tools/test` 13,075 项通过；新增 `tools/roblox_mock.luau`（game/Players/DataStore/MemoryStore/MessagingService/PolicyService 的最小 Mock）与 `tools/server_smoke.luau`（151 项：加入 → 领取起始宠 → 推图 → 孵蛋 → 营地 → 远征整局 → 竞技场 → 任务 → 轮回 → 离线结算 → 限流 / 非法参数），种子固定、结果确定；`tools/pve_curve`（每关最低可过等级）、`tools/economy_model`（每区所需金币 / 活跃时长 / 挂机时长）。CI 增加冒烟步骤。
+- **经济调参**（见 BALANCE.md「经济模型」）：关卡金币 35×2.5^(区−1)×1.12^(关−1)、经验 40×2^(区−1)×1.1^(关−1)；升级费 20·L^1.6·√稀有度；矿场 0.05×战力^0.6 币/s；蛋价 500 / 2,500 / 25,000 币 + 250 钻。结果：1 区约 1.2 h 活跃或 2.5 h 挂机，2 区 1.6 / 2.3 h，3 区 1.9 / 2.4 h。
+- 决策：D-07 轮回采用**软重置**（保留灵宠 / 钻石 / 天赋 / 图鉴；重置关卡 / 金币 / 营地），已记入 DECISIONS。
+
+### 问题 / 风险
+- **未在 Roblox Studio 实机运行**：客户端代码只能过 StyLua / Selene / luau-analyze 静态检查，UI 布局、镜头、ProximityPrompt、ProfileStore 真实行为都需实机验证（清单见 README「Studio 验证清单」）。
+- `src/shared` 使用字符串相对 `require("./X")`，依赖 Roblox 的字符串 require 支持；若 Studio 版本不支持需回退为实例路径。
+- 通行证 / 开发者商品 ID 均为 0 占位，商店按钮显示 "Coming soon"；发布后填入真实 ID。
+- MemoryStore / MessagingService / PolicyService 在 Studio 需开启 API 访问，否则竞技场只会看到机器人、公告仅本服。
+- 像素字体 Press Start 2P 的 Font 资源可能不可用，`PixelTheme.font()` 会回退到 Arcade。
+
+### 下一步
+1. Studio 实机：`rojo serve` → 逐项过验证清单，修 UI / 运行时问题（预计一轮 1–2 天）。
+2. 表现层补齐：伤害数字 / 状态图标 / 蓄力条、音效、站点模型替换灰盒。
+3. 第二轮平衡：用真实玩家数据校准 PvE 曲线（当前 2 区 5–10 关、3 区 6–10 关对 Lv 需求跳变偏陡）。
+4. 埋点 / 反作弊 / 远程配置（P2 剩余项）。
+
+---
+
 ## 2026-09-25 · Day 1 · P0 开工：工程化 + 确定性战斗模拟器
 
 **阶段**：P0 概念验证　**状态**：进行中（模拟器与配表完成，Roblox 端播放/UI 未开始）
