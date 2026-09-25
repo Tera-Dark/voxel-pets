@@ -310,7 +310,7 @@ do
 		end
 	end
 	local r1, r10 = Stages.rewards(1, 1), Stages.rewards(1, 10)
-	check(r1.coins == 20 and r1.xp == 15, "zone1 stage1 rewards 20c/15xp")
+	check(r1.coins == Stages.COIN_BASE and r1.xp == Stages.XP_BASE, "zone1 stage1 rewards = base")
 	check(r10.coins > r1.coins * 5, "boss rewards scale")
 	check(r10.firstClearGems == 25, "boss first clear 25 gems")
 	local data = {}

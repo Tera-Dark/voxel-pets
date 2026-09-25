@@ -24,7 +24,7 @@ Camp.Buildings = {
 		affinity = { Grass = true, Water = true },
 		baseSlots = 2,
 		maxSlots = 8,
-		ratePerPower = 0.012,
+		ratePerPower = 0.03,
 		upgradeBaseCost = 500,
 		unlock = { type = "StagesCleared", count = 5 },
 		order = 2,

@@ -84,7 +84,8 @@ local DataTemplate = {
 		sfx = true,
 	},
 
-	passes = {}, -- gamepass id (string) -> true
+	passes = {}, -- pass name -> true (VIP, TripleHatch, LuckyCharm)
+	purchases = {}, -- receipt PurchaseId -> true (ProcessReceipt idempotency)
 	tutorialStep = 0,
 }
 

@@ -140,12 +140,11 @@ function PetService.SetTeam(player, slot: number, uid: string?): (boolean, strin
 		if d.expedition.run then
 			return false, "Finish or abandon your expedition first"
 		end
-		for buildingId, b in d.camp.buildings do
+		for _, b in d.camp.buildings do
 			local idx = table.find(b.workers, uid)
 			if idx then
+				Registry.get("CampService").Settle(player) -- bank production before the roster changes
 				table.remove(b.workers, idx) -- pull it out of the camp automatically
-				Registry.get("CampService").Settle(player)
-				local _ = buildingId
 			end
 		end
 		for s, other in d.team do

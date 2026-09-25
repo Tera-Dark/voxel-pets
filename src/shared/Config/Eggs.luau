@@ -4,7 +4,7 @@ local Eggs = {
 	MeadowEgg = {
 		displayName = "Meadow Egg",
 		zone = 1,
-		price = { currency = "coins", amount = 100 },
+		price = { currency = "coins", amount = 500 },
 		pool = {
 			Common = {
 				"GrassSlime",
@@ -39,7 +39,7 @@ local Eggs = {
 	VolcanoEgg = {
 		displayName = "Volcano Egg",
 		zone = 3,
-		price = { currency = "coins", amount = 60000 },
+		price = { currency = "coins", amount = 25000 },
 		pool = {
 			Common = { "CinderPup", "SlagTortoise", "Ashwing", "MagmaSlug" },
 			Uncommon = { "Sunfinch", "Duskling" },

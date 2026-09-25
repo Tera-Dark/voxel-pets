@@ -26,6 +26,9 @@ jobs:
       - name: Tests (Lune)
         run: lune run tools/test
 
+      - name: Server smoke test (Roblox API mock)
+        run: lune run tools/server_smoke
+
       - name: Rojo build (validates project tree)
         run: rojo build default.project.json -o /tmp/VoxelPets.rbxl
 

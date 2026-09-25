@@ -60,7 +60,7 @@ end
 -- Coins to buy one level directly (idle coins -> power).
 function PetInstance.levelUpCost(inst): number
 	local rarityMult = Rarities.StatMult[Pets[inst.petId].rarity]
-	return math.floor(25 * inst.level ^ 1.6 * rarityMult ^ 0.5)
+	return math.floor(20 * inst.level ^ 1.6 * rarityMult ^ 0.5) -- 25 -> 20 (2026-09-26 economy pass)
 end
 
 function PetInstance.canLevelUp(inst): boolean

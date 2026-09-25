@@ -38,6 +38,9 @@ Stages.Zones = {
 }
 
 Stages.STAGES_PER_ZONE = 10
+-- Economy pass 2026-09-26 (see docs/BALANCE.md "经济模型"): coins 20 -> 35, xp 15 -> 40.
+Stages.COIN_BASE = 35
+Stages.XP_BASE = 40
 Stages.STAR_HP_THRESHOLD = 0.5 -- 2nd star: finish with >= 50% HP
 Stages.STAR_TIME_LIMIT = 30 -- 3rd star: finish within 30 s
 
@@ -63,8 +66,8 @@ end
 function Stages.rewards(zone: number, stage: number)
 	local _, kind = Stages.enemyFor(zone, stage)
 	local scale = 2.5 ^ (zone - 1) * 1.12 ^ (stage - 1)
-	local coins = math.floor(20 * scale)
-	local xp = math.floor(15 * 2 ^ (zone - 1) * 1.1 ^ (stage - 1))
+	local coins = math.floor(Stages.COIN_BASE * scale)
+	local xp = math.floor(Stages.XP_BASE * 2 ^ (zone - 1) * 1.1 ^ (stage - 1))
 	local firstClearGems = kind == "Boss" and 25 or (kind == "Elite" and 10 or 3)
 	local essence = kind == "Boss" and 5 or 0
 	if kind == "Elite" then

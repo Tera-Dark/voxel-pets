@@ -23,12 +23,14 @@ local Network = {
 		-- Stages
 		"StartStage", -- (zone, stage) -> ok, err, battlePayload
 		-- Expedition
+		"GetExpedition", -- () -> view { run, available, talents, tickets, marks, unlocked }
 		"ExpeditionStart", -- (uid) -> ok, err, runState
 		"ExpeditionMove", -- (nodeId) -> ok, err, runState|battlePayload
 		"ExpeditionChoose", -- (choiceIndex) -> ok, err, runState  (relic pick / event choice / shop buy / skip)
 		"ExpeditionAbandon", -- () -> ok
 		"ExpeditionBuyTalent", -- (talentId) -> ok, err
 		-- Camp
+		"GetCamp", -- () -> snapshot { buildings, pending, ratesPerHour }
 		"CampAssign", -- (buildingId, slot, uid|nil) -> ok, err
 		"CampUpgrade", -- (buildingId) -> ok, err
 		"CampCollect", -- () -> ok, err, rewards
@@ -38,6 +40,7 @@ local Network = {
 		"ArenaLeaderboard", -- () -> top 50
 		-- Quests / prestige / shop
 		"ClaimQuest", -- (questId) -> ok, err
+		"GetPrestige", -- () -> preview { canPrestige, points, ... }
 		"Prestige", -- () -> ok, err, points
 		"GetShop", -- () -> product list with ids + prices
 		"BuyWithGems", -- (itemId) -> ok, err

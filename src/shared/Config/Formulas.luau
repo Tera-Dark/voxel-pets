@@ -58,7 +58,7 @@ function Formulas.enemyScale(zone: number, stage: number): number
 end
 
 function Formulas.xpForLevel(level: number): number
-	return math.floor(50 * level ^ 1.8)
+	return math.floor(30 * level ^ 1.7) -- 50*L^1.8 -> 30*L^1.7 (2026-09-26 economy pass)
 end
 
 -- Compact number formatting: 1234 -> "1.23K"
