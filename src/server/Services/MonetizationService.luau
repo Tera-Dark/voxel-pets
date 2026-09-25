@@ -8,6 +8,7 @@ local Players = game:GetService("Players")
 
 local Shared = ReplicatedStorage.Shared
 local Stages = require(Shared.Config.Stages)
+local DailyRewards = require(Shared.Config.DailyRewards)
 
 local Registry = require(script.Parent.Parent.Registry)
 local Remotes = require(script.Parent.Parent.Network.Remotes)
@@ -65,15 +66,7 @@ MonetizationService.GemShop = {
 	},
 }
 
-MonetizationService.DailyRewards = { -- 7-day cycle
-	{ coins = 200 },
-	{ gems = 10 },
-	{ coins = 500 },
-	{ essence = 5 },
-	{ gems = 20 },
-	{ tickets = 2 },
-	{ gems = 40, coins = 1000 },
-}
+MonetizationService.DailyRewards = DailyRewards -- 7-day cycle (shared config)
 
 -- ---------------------------------------------------------------- state
 local policyCache = {} -- [player] = { restricted = bool }
