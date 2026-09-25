@@ -8,7 +8,7 @@
 |---|---|
 | 当前阶段 | **P0 概念验证**（确定性战斗模拟器 + 配表 + 平衡工具已完成；Roblox 端播放 / UI 进行中） |
 | 下一里程碑 | P0 退出：Studio 可玩的 1v1 自动战斗 + 灰盒 Rogue 1 层 + 孵蛋 + 矿场 |
-| CI | 配置已就绪（`ci/`），待 token 开通 workflow 权限后启用 |
+| CI | ![CI](https://github.com/Tera-Dark/voxel-pets/actions/workflows/ci.yml/badge.svg) |
 | 引擎 / 语言 | Roblox Studio · Luau · Rojo |
 | 目标平台 | Roblox 全平台，移动端优先 |
 
