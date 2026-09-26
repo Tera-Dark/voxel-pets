@@ -57,7 +57,8 @@ lune run tools/tune_roles               # 职业模板网格搜索
 lune run tools/pve_curve                # 每关最低可过等级（PvE 曲线）
 lune run tools/economy_model            # 每区所需金币 / 活跃时长 / 挂机时长
 stylua src tools && selene src tools    # 格式化 + lint
-rojo build default.project.json -o VoxelPets.rbxl   # 产出可直接在 Studio 打开的 place
+./scripts/build.sh                      # 带版本戳构建 VoxelPets.rbxl（git 短哈希 + 日期，显示在游戏内）
+rojo build default.project.json -o VoxelPets.rbxl   # 不带版本戳的构建（游戏内显示 "dev"）
 rojo serve default.project.json         # 或：在 Roblox Studio 中用 Rojo 插件连接
 ```
 
@@ -74,11 +75,13 @@ rojo serve default.project.json         # 或：在 Roblox Studio 中用 Rojo �
 ## 实机测试指南（给项目所有者：不需要任何开发知识）
 
 **每次测试只需 3 步：**
+0. **先完全关闭 Roblox Studio**；关闭时如果问是否保存，点 **不保存（Don't Save）**——否则 Studio 会把旧版本写回文件，测到的还是旧游戏。
 1. 在工作区下载最新的 `VoxelPets.rbxl`，双击用 Roblox Studio 打开。
 2. 点顶部的 **Play（▶）**。
 3. 按下面的"应该看到"逐条体验；**任何不对劲就截图发给开发者**（截整个画面即可）。
 
 **应该看到：**
+- 加载界面和游戏右下角有版本号（如 `v0.1.1 (abc1234 2026-09-26)`），应与开发者告知的一致——截图时顺带就能确认测的是哪个版本。
 - 几秒内加载界面的三行变成 `[OK]` 并进入游戏；屏幕顶部有红色小条 **TEST MODE - progress is not saved**（本地测试不存档，属正常）。
 - 身后跟着一只方块宠物；左侧是菜单（Pets / Battle / Hatch / Camp / ...），出生点周围有 9 个发光柱子，走近按 **E** 打开对应界面。
 - **Battle**：选关卡点 FIGHT → 镜头切到战斗舞台自动开打；可用 1×/2×/3× 和 SKIP；赢了点 Next 继续。

@@ -25,7 +25,7 @@
 - [x] 营地三建筑产出（矿场币 / 果园经验 / 哨站门票）+ 离线结算
 - [x] 存档（ProfileStore vendored，`team["1".."5"]` 结构预留）
 - [x] 启动链路加固 + 游戏内诊断 + 客户端端到端模拟进 CI（Day 3，首次实机卡加载后）
-- [ ] **Studio 实机验证**（字符串 require、UI、镜头、ProximityPrompt、ProfileStore）← 当前阻塞项（首次实机：卡加载 → 已修复，待复测）
+- [ ] **Studio 实机验证**（字符串 require、UI、镜头、ProximityPrompt、ProfileStore）← 进行中（首次实机：卡加载 → 已修复；复测：加载通过 2026-09-26；其余清单项待逐项确认）
 - [ ] 退出标准：10 人内部试玩"还想再来一局"≥ 4/5；模拟器曲线符合预期
 
 ## P1 · 垂直切片（6 周）
