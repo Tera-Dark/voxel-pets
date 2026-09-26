@@ -6,7 +6,7 @@
 
 | 项目 | 状态 |
 |---|---|
-| 当前阶段 | **MVP 代码完成，Studio 实机验证中**（首次实机卡加载已修复；单元 13,092 · 服务端冒烟 152 · 启动鲁棒性 43 · 客户端端到端 108 全部通过） |
+| 当前阶段 | **MVP 代码完成，Studio 实机验证中**（v0.2.0：新 HUD + 新手教程；单元 13,149 · 服务端冒烟 169 · 启动鲁棒性 43 · 客户端端到端 165 全部通过） |
 | 下一里程碑 | Studio 实机跑通验证清单 → 内部试玩（10 人）→ 表现层补齐 |
 | CI | ![CI](https://github.com/Tera-Dark/voxel-pets/actions/workflows/ci.yml/badge.svg) |
 | 引擎 / 语言 | Roblox Studio · Luau · Rojo |
@@ -46,10 +46,11 @@ voxel-pets/
 # 工具链（Windows/macOS 用 rokit: `rokit install`；Linux/CI 用脚本）
 ./scripts/install_tools.sh ~/bin && export PATH=~/bin:$PATH
 
-lune run tools/test                     # 13,092 项单元测试（tools/tests/ 五套件）
-lune run tools/server_smoke             # 152 项服务端冒烟（Roblox API Mock，完整玩家旅程）
+lune run tools/test                     # 13,149 项单元测试（tools/tests/ 五套件）
+lune run tools/server_smoke             # 169 项服务端冒烟（Roblox API Mock，完整玩家旅程 + 教程）
 lune run tools/boot_smoke               # 43 项启动鲁棒性（虚拟时间调度：挂起 / 崩溃 / 回退场景）
-lune run tools/client_smoke             # 108 项客户端端到端（真实客户端脚本 × 真实服务端，全部界面 + 主流程）
+lune run tools/client_smoke             # 165 项客户端端到端（真实客户端 × 真实服务端：教程、菜单、全部界面）
+lune run tools/ui_snapshot && python3 scripts/render_ui.py   # 界面预览 PNG（/tmp/ui_snapshots，见 docs/ui-preview）
 python3 scripts/check_roblox_api.py     # 属性 / 枚举 / 服务名对照 Roblox API Dump 校验
 lune run tools/sim_replay -- Emberfox ThornbackBoar 42 InsightLens   # 单场逐事件日志
 lune run tools/sim_batch -- --quick     # 平衡快照（胜率 / 时长矩阵；去掉 --quick 跑 N=1000）
@@ -80,19 +81,19 @@ rojo serve default.project.json         # 或：在 Roblox Studio 中用 Rojo �
 2. 点顶部的 **Play（▶）**。
 3. 按下面的"应该看到"逐条体验；**任何不对劲就截图发给开发者**（截整个画面即可）。
 
-**应该看到：**
-- 加载界面和游戏右下角有版本号（如 `v0.1.1 (abc1234 2026-09-26)`），应与开发者告知的一致——截图时顺带就能确认测的是哪个版本。
-- 几秒内加载界面的三行变成 `[OK]` 并进入游戏；屏幕顶部有红色小条 **TEST MODE - progress is not saved**（本地测试不存档，属正常）。
-- 身后跟着一只方块宠物；左侧是菜单（Pets / Battle / Hatch / Camp / ...），出生点周围有 9 个发光柱子，走近按 **E** 打开对应界面。
-- **Battle**：选关卡点 FIGHT → 镜头切到战斗舞台自动开打；可用 1×/2×/3× 和 SKIP；赢了点 Next 继续。
-- **Hatch**：先点 `Details (odds)` 看概率（每只宠物都有百分比，合计 100%），再孵一颗蛋。
-- **Camp**：点 `+ assign pet` 派一只宠物打工，等一会儿点 COLLECT。
-- 通关 1-5 后 **Expedition** 解锁：走一整层（战斗 / 选遗物 / 事件 / 商店 / 篝火 / Boss）。
-- **Arena / Quests / Shop / Codex / Prestige** 都能打开；在 Shop 点 Robux 商品会提示 "Coming soon" 属正常（还没上架）。
+**应该看到（新玩家流程，约 2-3 分钟）：**
+- 加载界面和右上角有版本号（如 `v0.2.0 (abc1234 2026-09-26)`），应与开发者告知的一致。
+- 进入后弹出 **Choose your partner!**：三只伙伴卡片（3D 预览 + 属性条），点 CHOOSE 选一只。
+- 左上是金币 / 钻石和**目标栏**（写着现在该做什么，点它会直接带你过去）；黄色箭头指着右下角 **BATTLE** → 点它 → 再点 **FIGHT**，战斗全自动。
+- 赢了之后底部菜单多出 **Hatch**（带 NEW 和红点）→ 打开 → **Hatch x1 (FREE)** 免费孵第一颗蛋（必出不同属性的宠物）。
+- 再打赢 1-2 → 弹出 **Tutorial complete!**（+50 钻石），菜单出现 Quests、Shop。
+- 之后随进度解锁：1-3 营地 Camp、1-5 远征 Expedition、1-10 竞技场 Arena……每次解锁顶部会有横幅。
+- 底部菜单上方的 **v** 可以收起菜单（变成 MENU 标签）；打开任何界面时菜单会自动让开。
+- 屏幕右上角红色小条 **TEST MODE: not saved** = 本地测试不存档，属正常。
 
 **出问题时怎么截图：**
 - 卡在加载界面 → 等 20 秒，界面会显示诊断信息，直接截图。
-- 游戏里左下角出现红色 **ERR** 按钮 → 点一下打开开发者日志，截图。
+- 屏幕顶部中间出现红色 **ERR** 按钮 → 点一下打开开发者日志，截图。
 - 某个界面显示 "could not open" → 截图。
 
 <details><summary>开发者附注（Studio 高级设置）</summary>

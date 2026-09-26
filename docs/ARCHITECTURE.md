@@ -27,7 +27,7 @@
 - 豁免（有意保留，评审需说明理由）：
   - `src/server/Vendor/ProfileStore.luau`（第三方 vendored，不格式化不 lint）；
   - `src/shared/Combat/Simulator.luau` 540 行 / 24 函数 —— 单一职责的战斗内核，函数粒度小、内聚高，强行拆分只会增加跨模块跳转。
-  - 测试基础设施（Day 3，均 < 700 行，已按职责拆分）：`tools/mock/instances.luau` 683（API 校验的假 Instance 系统）、`tools/client_mock.luau` 594（服务 / 远程桥接 / 模块加载）、`tools/roblox_mock.luau` 552（服务端 Mock）；`tools/mock/datatypes.luau` 469、`tools/mock/scheduler.luau` 86。
+  - 测试基础设施（均 < 700 行，按职责拆分）：`tools/client_smoke.luau` 664、`tools/client_mock.luau` 625（服务 / 远程桥接 / 模块加载）、`tools/mock/instances.luau` 581（假 Instance 系统）、`tools/roblox_mock.luau` 555（服务端 Mock）；`tools/mock/{datatypes,props,gui_dump,scheduler}.luau`。Day 4 为守住红线拆出 `mock/props`、`mock/gui_dump`、客户端 `BattleFlow`。
 
 ### 2026-09-26 架构体检结果
 
@@ -55,6 +55,20 @@ DataService.Ready():选存档模式（store / studio store / offline）→ 连�
 - **绝不静默等待**：任何等待都有超时或可见状态；任何远程调用 20 s 超时（`Net.invoke`）。
 - **一处坏不影响全局**：服务、界面、每段 UI 接线、每帧循环都各自隔离；坏界面显示错误面板。
 - **测试者可见**：加载界面诊断 + 开发者日志徽章（Studio / 所有者）——一张截图定位问题。
+- **加载期数据**：必须进首个快照的准备逻辑（初始宠、每日刷新、教程追进度）用 `DataService.OnLoad` 同步钩子，不用 `PlayerLoaded`——Roblox 默认 Deferred 信号下处理函数在快照发出之后才跑（D-25）。
+
+## 客户端 HUD 结构（Day 4）
+
+| 模块 | 职责 |
+|---|---|
+| `UI/Screens/HUD.luau` | 组装：TopBar / GoalTracker / Dock / ActionBar + 公告条 + 红点规则 + 解锁横幅；句柄挂到 `ctx.hud` |
+| `UI/Hud/TopBar.luau` | 左上货币（+ 展开其它货币，按功能解锁过滤）、右上齿轮 |
+| `UI/Hud/GoalTracker.luau` | 目标栏：教程步骤 → 下一个解锁 → 每日任务（`goalFor` 纯函数） |
+| `UI/Hud/Dock.luau` | 底部功能坞：已解锁功能、分组、NEW / 红点、收起、界面打开时让位、窄屏上移 |
+| `UI/Hud/ActionBar.luau` | 出战宠物卡 + BATTLE（`Stages.nextStage`） |
+| `UI/Tutorial.luau` + `UI/Highlight.luau` | 教程：伙伴选择、指引气泡（位置规则与 `scripts/render_ui.py` 同步）、完成庆祝 |
+| `UI/PixelIcons.luau` | 10×10 像素图标（Frame 绘制） |
+| `shared/Config/Features.luau` / `Tutorial.luau` | 功能分组与解锁表 / 教程步骤与进度推导（纯逻辑，单测覆盖） |
 
 ## 测试分层
 
@@ -65,6 +79,7 @@ DataService.Ready():选存档模式（store / studio store / offline）→ 连�
 | 服务端冒烟 | `tools/server_smoke.luau`（同步 Mock） | 完整玩家旅程 |
 | 启动鲁棒性 | `tools/boot_smoke.luau`（虚拟时间调度） | 挂起 / 崩溃 / 回退 / 竞态 |
 | 客户端端到端 | `tools/client_mock.luau` + `tools/client_smoke.luau` | 真实客户端脚本 × 真实服务端：全部界面、主流程、按钮模糊测试、失败场景画面 |
+| 界面预览 | `tools/ui_snapshot.luau` + `scripts/render_ui.py` | 按 Roblox 布局规则出 PNG（桌面 / 手机视口），人工审查排版 |
 | 实机 | Roblox Studio（项目所有者） | 渲染、布局、镜头、输入、真实云服务 |
 
 ## 鲁棒性约定
