@@ -2,7 +2,9 @@
 -- Always-visible HUD: currencies (top), menu buttons (left), announcement ticker, settings.
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
-local Formulas = require(ReplicatedStorage.Shared.Config.Formulas)
+local Shared = ReplicatedStorage.Shared
+local Formulas = require(Shared.Config.Formulas)
+local Pets = require(Shared.Config.Pets)
 
 local HUD = {}
 
@@ -166,8 +168,6 @@ function HUD.build(host, ctx)
 	local function refreshChip()
 		local inst = State.teamPet()
 		if inst then
-			local def = ReplicatedStorage.Shared.Config.Pets
-			local Pets = require(def)
 			chipName.Text = State.petName(inst) .. "  Lv" .. inst.level
 			chipInfo.Text = string.format(
 				"%s %s  Power %s",

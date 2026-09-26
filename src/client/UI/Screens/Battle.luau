@@ -2,8 +2,9 @@
 -- Battle playback overlay: HP bars, event log, speed/skip, result panel. Driven by BattleController.
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
-local Pets = require(ReplicatedStorage.Shared.Config.Pets)
-local Formulas = require(ReplicatedStorage.Shared.Config.Formulas)
+local Shared = ReplicatedStorage.Shared
+local Pets = require(Shared.Config.Pets)
+local Formulas = require(Shared.Config.Formulas)
 
 local Battle = {}
 

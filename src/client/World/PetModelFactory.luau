@@ -3,7 +3,8 @@
 -- deterministic per-species hue shift, variant tints. Replaced by real voxel meshes later (CA-04).
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
-local Pets = require(ReplicatedStorage.Shared.Config.Pets)
+local Shared = ReplicatedStorage.Shared
+local Pets = require(Shared.Config.Pets)
 local Theme = require(script.Parent.Parent.UI.PixelTheme)
 
 local Factory = {}

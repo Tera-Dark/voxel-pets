@@ -7,7 +7,8 @@ local StarterGui = game:GetService("StarterGui")
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
-local StagesConfig = require(ReplicatedStorage.Shared.Config.Stages)
+local Shared = ReplicatedStorage.Shared
+local StagesConfig = require(Shared.Config.Stages)
 
 local Client = script.Parent
 local Net = require(Client.Net)

@@ -2,7 +2,8 @@
 -- Client-side remote wrappers. invoke() never throws: returns ok, err, data.
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
-local Network = require(ReplicatedStorage.Shared.Network)
+local Shared = ReplicatedStorage.Shared
+local Network = require(Shared.Network)
 
 local Net = {}
 local folder = ReplicatedStorage:WaitForChild(Network.FOLDER, 30)

@@ -6,7 +6,8 @@ local TweenService = game:GetService("TweenService")
 local Workspace = game:GetService("Workspace")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
-local Skills = require(ReplicatedStorage.Shared.Config.Skills)
+local Shared = ReplicatedStorage.Shared
+local Skills = require(Shared.Config.Skills)
 local Factory = require(script.Parent.PetModelFactory)
 local Theme = require(script.Parent.Parent.UI.PixelTheme)
 
