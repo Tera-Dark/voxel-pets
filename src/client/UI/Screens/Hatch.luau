@@ -248,46 +248,48 @@ end
 function Screen.build(host, ctx)
 	Screen.ctx = ctx
 	local C, Theme = ctx.C, ctx.Theme
+	-- Flow layout: the egg cards wrap (4 wide on desktop, 2x2 on a portrait phone) and the
+	-- window stretches with the screen; ScreenManager provides the close button.
 	local root = C.panel({
 		Name = "Hatch",
-		Size = UDim2.fromOffset(860, 420),
+		Size = UDim2.fromScale(0.94, 0.92),
 		Position = UDim2.fromScale(0.5, 0.5),
 		AnchorPoint = Vector2.new(0.5, 0.5),
 		Parent = host,
 	}, "Hatchery")
-	ui.cards = C.frame({
-		Size = UDim2.new(1, -16, 0, 300),
-		Position = UDim2.fromOffset(8, 40),
+	C.new("UISizeConstraint", { MaxSize = Vector2.new(920, 560), Parent = root })
+	local content = C.frame({
+		Name = "Content",
+		Size = UDim2.new(1, 0, 1, -34),
+		Position = UDim2.fromOffset(0, 32),
 		BackgroundTransparency = 1,
 		Parent = root,
 	})
-	C.list(ui.cards, 10, Enum.FillDirection.Horizontal, Enum.HorizontalAlignment.Center)
+	C.padding(content, 10)
+	C.list(content, 8)
+	ui.cards = C.scroll({
+		Name = "Cards",
+		Size = UDim2.new(1, 0, 1, -70),
+		BackgroundTransparency = 1,
+		Parent = content,
+	})
+	C.grid(ui.cards, 196, 300, 8)
 	ui.luck = C.label({
-		Size = UDim2.new(1, -16, 0, 20),
-		Position = UDim2.new(0, 8, 1, -60),
+		Size = UDim2.new(1, 0, 0, 18),
 		TextSize = 10,
 		TextColor3 = Theme.Colors.accent,
 		TextXAlignment = Enum.TextXAlignment.Center,
-		Parent = root,
+		Parent = content,
 	})
 	C.label({
-		Size = UDim2.new(1, -16, 0, 30),
-		Position = UDim2.new(0, 8, 1, -38),
-		Text = "Odds are shown before every purchase and include any active luck boost. Pets are never lost: dismantle extras for shards, or fuse 5 identical pets into a Golden variant.",
+		Size = UDim2.new(1, 0, 0, 28),
+		Text = "Odds shown before purchase include luck boosts. Pets are never lost: dismantle extras for shards, fuse 5 identical for a Golden.",
 		TextSize = 8,
 		TextColor3 = Theme.Colors.textDim,
 		TextXAlignment = Enum.TextXAlignment.Center,
-		Parent = root,
+		TextWrapped = true,
+		Parent = content,
 	})
-	C.button({
-		Size = UDim2.fromOffset(28, 24),
-		Position = UDim2.new(1, -31, 0, 3),
-		Text = "X",
-		BackgroundColor3 = Theme.Colors.bad,
-		Parent = root,
-	}, function()
-		ctx.Screens.close()
-	end)
 	ctx.State.onKeys(
 		{ "coins", "gems", "luckCharges", "passes", "stages", "freeHatches" },
 		function()

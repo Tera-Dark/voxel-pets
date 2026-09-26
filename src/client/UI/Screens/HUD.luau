@@ -225,6 +225,18 @@ function HUD.build(host, ctx)
 		refreshBadges()
 	end)
 
+	-- Orientation change (portrait <-> landscape): rearrange goal tracker, dock rows and the
+	-- pet chip / BATTLE row so a phone in portrait reads big and uncluttered.
+	local function hudRelayout()
+		local portrait = ctx.portrait == true
+		local canvas = if ctx.canvasSize then ctx.canvasSize() else Vector2.new(1280, 720)
+		goal.relayout(portrait, canvas.X)
+		ticker.Size = UDim2.fromOffset(math.min(600, canvas.X - 20), 22)
+		dock.rebuild() -- rows re-wrap for the new width
+		dock.relayout()
+		bar.relayout(portrait, dock.occupiedHeight())
+	end
+
 	ctx.hud = {
 		root = root,
 		top = top,
@@ -233,7 +245,9 @@ function HUD.build(host, ctx)
 		battleButton = bar.battle,
 		petChip = bar.chip,
 		refreshBadges = refreshBadges,
+		relayout = hudRelayout,
 	}
+	hudRelayout()
 	return root
 end
 

@@ -209,10 +209,15 @@ local function rescale()
 	if viewport.X <= 0 or viewport.Y <= 0 then
 		return
 	end
-	-- 0.75 floor keeps the pixel text readable on phones; screens fit themselves (ScreenManager)
-	uiScale.Scale = math.clamp(math.min(viewport.X / 1280, viewport.Y / 720), 0.75, 1.3)
-	if ctx and ctx.hud then
-		ctx.hud.dock.relayout()
+	-- Landscape is designed at 1280x720; portrait at 540x960 (the HUD rearranges, screens flow).
+	-- The floors keep pixel text readable on phones; screens fit themselves (ScreenManager).
+	local portrait = viewport.Y > viewport.X
+	local designW, designH = if portrait then 540 else 1280, if portrait then 960 else 720
+	local floor = if portrait then 0.8 else 0.75
+	uiScale.Scale = math.clamp(math.min(viewport.X / designW, viewport.Y / designH), floor, 1.6)
+	ctx.portrait = portrait
+	if ctx.hud then
+		ctx.hud.relayout()
 	end
 	if Screens and Screens.refit then
 		Screens.refit()

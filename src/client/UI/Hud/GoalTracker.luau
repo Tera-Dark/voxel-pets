@@ -135,13 +135,22 @@ function GoalTracker.build(root, ctx, opts)
 	end
 	State.onKeys(GoalTracker.KEYS, refresh)
 	refresh()
-	return {
+	local api = {
 		frame = panel,
 		refresh = refresh,
 		goal = function()
 			return current
 		end,
 	}
+	-- Landscape: fixed 310px next to the currency bar. Portrait: full width under it.
+	function api.relayout(portrait: boolean, canvasX: number)
+		if portrait then
+			panel.Size = UDim2.fromOffset(math.max(200, canvasX - 20), 46)
+		else
+			panel.Size = UDim2.fromOffset(310, 46)
+		end
+	end
+	return api
 end
 
 return GoalTracker

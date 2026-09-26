@@ -1,9 +1,9 @@
 --!nonstrict
 -- Bottom dock: unlocked features only (the big BATTLE button is the entry to stages), grouped
 -- (adventure / pets / base / more) with gaps, pixel icon + label tiles. A tab collapses or
--- expands it; it hides while a screen is open. It sits between the pet chip and the BATTLE
--- button when it fits, otherwise one row higher (narrow phones), so labels never disappear.
--- Tiles show a "!" badge (something to do) or a NEW tag (unlocked this session, until opened).
+-- expands it; it hides while a screen is open. Landscape: one row between the pet chip and
+-- BATTLE (raised a row when too wide). Portrait: two centred rows at the bottom, with the
+-- chip + BATTLE row stacked above. Tiles show a "!" badge (something to do) or a NEW tag.
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Shared = ReplicatedStorage.Shared
@@ -15,6 +15,7 @@ local Dock = {}
 
 local TILE_W, TILE_H = 84, 62
 local GAP, GROUP_GAP = 3, 8
+local ROW_GAP = 4
 local BOTTOM_MARGIN = 8
 local LEFT_RESERVED = 250 -- pet chip: 10 + 230 + 10
 local RIGHT_RESERVED = 196 -- BATTLE: 176 + 10 + 10
@@ -36,6 +37,7 @@ function Dock.build(root, ctx, opts)
 		expanded = true, -- the player's choice
 		screenOpen = false,
 		buttons = {},
+		rowFrames = {},
 		badges = {},
 		fresh = {}, -- [id] = true while the NEW tag shows
 		signature = nil,
@@ -50,13 +52,10 @@ function Dock.build(root, ctx, opts)
 		BackgroundTransparency = 1,
 		Parent = root,
 	})
-	local layoutObj =
-		C.list(frame, GAP, Enum.FillDirection.Horizontal, Enum.HorizontalAlignment.Center)
-	layoutObj.VerticalAlignment = Enum.VerticalAlignment.Bottom
-
+	C.list(frame, ROW_GAP)
 	local toggle = C.button({
 		Name = "DockToggle",
-		Size = UDim2.fromOffset(72, 18),
+		Size = UDim2.fromOffset(72, 16),
 		AnchorPoint = Vector2.new(0.5, 1),
 		Text = "v",
 		TextSize = 8,
@@ -91,51 +90,27 @@ function Dock.build(root, ctx, opts)
 		b.New.Visible = self.fresh[id] == true
 	end
 
-	function self.relayout()
-		local count, groupSet, groups = 0, {}, 0
-		for id in self.buttons do
-			count += 1
-			local g = Features.ById[id].group
-			if not groupSet[g] then
-				groupSet[g] = true
-				groups += 1
-			end
-		end
-		local width = count * TILE_W
-			+ math.max(0, count - 1) * GAP
-			+ math.max(0, groups - 1) * GROUP_GAP
-		local canvasWidth = if opts.canvasWidth then opts.canvasWidth() else 1280
-		self.raised = width > canvasWidth - LEFT_RESERVED - RIGHT_RESERVED
-		local bottom = if self.raised then BOTTOM_MARGIN + 66 else BOTTOM_MARGIN
-		local offsetX = if self.raised then 0 else ROW_OFFSET
-		frame.Size = UDim2.fromOffset(math.max(width, TILE_W), TILE_H)
-		frame.Position = UDim2.new(0.5, offsetX, 1, -bottom)
-		frame.Visible = self.expanded and not self.screenOpen and count > 0
-		-- nothing worth collapsing until the dock has a few tiles
-		toggle.Visible = not self.screenOpen and (count >= 3 or not self.expanded)
-		if self.expanded then
-			toggle.Text = "v"
-			toggle.Size = UDim2.fromOffset(72, 16)
-			toggle.Position = UDim2.new(0.5, offsetX, 1, -(bottom + TILE_H + 4))
-		else
-			toggle.Text = "^  MENU"
-			toggle.Size = UDim2.fromOffset(110, 24)
-			toggle.Position = UDim2.new(0.5, ROW_OFFSET, 1, -BOTTOM_MARGIN)
-		end
-		toggleDot.Visible = not self.expanded and anyBadge()
-		for id in self.buttons do
-			paintItem(id)
-		end
+	local function makeRow()
+		local row = C.frame({
+			Name = "Row" .. tostring(#self.rowFrames + 1),
+			Size = UDim2.new(1, 0, 0, TILE_H),
+			BackgroundTransparency = 1,
+			Parent = frame,
+		})
+		local l = C.list(row, GAP, Enum.FillDirection.Horizontal, Enum.HorizontalAlignment.Center)
+		l.VerticalAlignment = Enum.VerticalAlignment.Bottom
+		table.insert(self.rowFrames, row)
+		return row
 	end
 
-	local function makeItem(f, order)
+	local function makeItem(f, order, parent)
 		local b = C.button({
 			Name = "Dock_" .. f.id,
 			Size = UDim2.fromOffset(TILE_W, TILE_H),
 			Text = "",
 			BackgroundColor3 = Theme.Colors.panel,
 			LayoutOrder = order,
-			Parent = frame,
+			Parent = parent,
 		}, function()
 			self.fresh[f.id] = nil
 			paintItem(f.id)
@@ -196,7 +171,8 @@ function Dock.build(root, ctx, opts)
 		for _, f in unlocked do
 			table.insert(ids, f.id)
 		end
-		local signature = table.concat(ids, ",")
+		-- portrait vs landscape wrap differently, so the layout mode is part of the signature
+		local signature = table.concat(ids, ",") .. (if ctx.portrait == true then "|p" else "|l")
 		if signature == self.signature then
 			return
 		end
@@ -214,13 +190,22 @@ function Dock.build(root, ctx, opts)
 			b:Destroy()
 		end
 		table.clear(self.buttons)
-		for _, child in frame:GetChildren() do
-			if child.Name == "Gap" then
-				child:Destroy()
-			end
+		for _, rowFrame in self.rowFrames do
+			rowFrame:Destroy()
 		end
-		local lastGroup = nil
+		table.clear(self.rowFrames)
+		local portrait = ctx.portrait == true
+		local perRow = if portrait
+			then math.max(1, math.ceil(#unlocked / 2))
+			else math.max(1, #unlocked)
+		local row, inRow, lastGroup = nil, 0, nil
 		for _, f in unlocked do
+			if inRow >= perRow then
+				row, inRow, lastGroup = nil, 0, nil
+			end
+			if not row then
+				row = makeRow()
+			end
 			local groupIndex = table.find(Features.GROUP_ORDER, f.group) or 9
 			local order = groupIndex * 100 + f.order
 			if lastGroup and f.group ~= lastGroup then
@@ -229,15 +214,90 @@ function Dock.build(root, ctx, opts)
 					Size = UDim2.fromOffset(GROUP_GAP - GAP, 8),
 					BackgroundTransparency = 1,
 					LayoutOrder = order - 1,
-					Parent = frame,
+					Parent = row,
 				})
 			end
 			lastGroup = f.group
-			self.buttons[f.id] = makeItem(f, order)
+			self.buttons[f.id] = makeItem(f, order, row)
+			inRow += 1
+		end
+		-- content width of each row (tiles + same-group gaps + group gaps), widest sizes the dock
+		self.rowWidths = {}
+		for i, rowFrame in self.rowFrames do
+			local tiles, gaps = 0, 0
+			for _, ch in rowFrame:GetChildren() do
+				if ch:IsA("TextButton") then
+					tiles += 1
+				elseif ch.Name == "Gap" then
+					gaps += 1
+				end
+			end
+			self.rowWidths[i] = tiles * TILE_W + math.max(0, tiles - 1) * GAP + gaps * GROUP_GAP
 		end
 		self.relayout()
 		if #newly > 0 and opts.onUnlocked then
 			opts.onUnlocked(newly)
+		end
+	end
+
+	-- Vertical space the dock occupies at the bottom (ActionBar stacks above it in portrait).
+	function self.occupiedHeight(): number
+		if #self.rowFrames == 0 then
+			return 0
+		end
+		if not self.expanded or self.screenOpen then
+			return 34 -- the collapsed MENU tab
+		end
+		return #self.rowFrames * TILE_H + (#self.rowFrames - 1) * ROW_GAP + 22
+	end
+
+	function self.relayout()
+		local count, groupSet, groups = 0, {}, 0
+		for id in self.buttons do
+			count += 1
+			local g = Features.ById[id].group
+			if not groupSet[g] then
+				groupSet[g] = true
+				groups += 1
+			end
+		end
+		local portrait = ctx.portrait == true
+		local width
+		if self.rowWidths and #self.rowWidths > 0 then
+			width = math.max(TILE_W, math.max(table.unpack(self.rowWidths)))
+		else
+			width = count * TILE_W
+				+ math.max(0, count - 1) * GAP
+				+ math.max(0, groups - 1) * GROUP_GAP
+		end
+		local canvasWidth = if opts.canvasWidth then opts.canvasWidth() else 1280
+		local height = #self.rowFrames * TILE_H + (#self.rowFrames - 1) * ROW_GAP
+		local bottom, offsetX
+		if portrait then
+			self.raised = false
+			bottom, offsetX = BOTTOM_MARGIN, 0
+		else
+			self.raised = width > canvasWidth - LEFT_RESERVED - RIGHT_RESERVED
+			bottom = if self.raised then BOTTOM_MARGIN + 66 else BOTTOM_MARGIN
+			offsetX = if self.raised then 0 else ROW_OFFSET
+		end
+		frame.Size = UDim2.fromOffset(math.max(width, TILE_W), height)
+		frame.Position = UDim2.new(0.5, offsetX, 1, -bottom)
+		frame.Visible = self.expanded and not self.screenOpen and count > 0
+		-- nothing worth collapsing until the dock has a few tiles
+		toggle.Visible = not self.screenOpen and (count >= 3 or not self.expanded)
+		if self.expanded then
+			toggle.Text = "v"
+			toggle.Size = UDim2.fromOffset(72, 16)
+			toggle.Position = UDim2.new(0.5, offsetX, 1, -(bottom + height + 4))
+		else
+			toggle.Text = "^  MENU"
+			toggle.Size = UDim2.fromOffset(110, 24)
+			toggle.Position = UDim2.new(0.5, if portrait then 0 else ROW_OFFSET, 1, -BOTTOM_MARGIN)
+		end
+		toggleDot.Visible = not self.expanded and anyBadge()
+		for id in self.buttons do
+			paintItem(id)
 		end
 	end
 
@@ -268,7 +328,9 @@ function Dock.build(root, ctx, opts)
 	toggle.Activated:Connect(function()
 		self.setExpanded(not self.expanded)
 	end)
-	State.onKeys(Dock.KEYS, self.rebuild)
+	State.onKeys(Dock.KEYS, function()
+		self.rebuild()
+	end)
 	self.rebuild()
 	self.frame = frame
 	self.toggle = toggle

@@ -1,15 +1,17 @@
 --!nonstrict
--- PvE stage select: zone tabs, 10 stage buttons with stars, enemy preview, fight.
+-- PvE stage select: zone tabs, stage buttons with stars, enemy preview on parchment, big FIGHT.
+-- Flow layout (one vertical list) so it works from portrait phones to desktop; the stage grid
+-- wraps and scrolls. Close button and pop-in come from ScreenManager.
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Shared = ReplicatedStorage.Shared
 local Pets = require(Shared.Config.Pets)
 local Skills = require(Shared.Config.Skills)
 local Stages = require(Shared.Config.Stages)
-local PixelIcons = require(script.Parent.Parent.PixelIcons)
 local Elements = require(Shared.Config.Elements)
 local Builder = require(Shared.Combat.Builder)
 local Formulas = require(Shared.Config.Formulas)
+local PixelIcons = require(script.Parent.Parent.PixelIcons)
 
 local Screen = {}
 local ui = {}
@@ -36,7 +38,7 @@ local function refresh(ctx)
 		local unlocked = Stages.isZoneUnlocked(z.id, p.stages)
 		local b = C.button({
 			Name = "ZoneTab" .. z.id,
-			Size = UDim2.fromOffset(200, 30),
+			Size = UDim2.fromOffset(150, 30),
 			Text = (if unlocked then "" else "    ") .. z.displayName,
 			LayoutOrder = i,
 			BackgroundColor3 = z.id == zone and Theme.Colors.info or Theme.Colors.panelLight,
@@ -49,7 +51,7 @@ local function refresh(ctx)
 		end)
 		C.setEnabled(b, unlocked)
 		if not unlocked then
-			PixelIcons.new("lock", 20, { Position = UDim2.fromOffset(10, 5), Parent = b })
+			PixelIcons.new("lock", 20, { Position = UDim2.fromOffset(8, 5), Parent = b })
 		end
 	end
 	for _, child in ui.grid:GetChildren() do
@@ -58,7 +60,7 @@ local function refresh(ctx)
 		end
 	end
 	for s = 1, Stages.STAGES_PER_ZONE do
-		local enemyId, kind = Stages.enemyFor(zone, s)
+		local _, kind = Stages.enemyFor(zone, s)
 		local stars = p.stages[Stages.key(zone, s)] or 0
 		local unlocked = Stages.isStageUnlocked(zone, s, p.stages)
 		local b = C.button({
@@ -74,11 +76,12 @@ local function refresh(ctx)
 					else string.rep("*", stars) .. string.rep("-", 3 - stars)
 			),
 			LayoutOrder = s,
-			BackgroundColor3 = s == stage and Theme.Colors.info
-				or (
-					kind == "Boss" and Theme.Colors.bad
-					or (kind == "Elite" and Theme.Colors.essence or Theme.Colors.panelLight)
-				),
+			BackgroundColor3 = if s == stage
+				then Theme.Colors.info
+				else if kind == "Boss"
+					then Theme.Colors.bad
+					elseif kind == "Elite" then Theme.Colors.essence
+					else Theme.Colors.panelLight,
 			TextSize = 9,
 			Parent = ui.grid,
 		}, function()
@@ -86,18 +89,18 @@ local function refresh(ctx)
 			refresh(ctx)
 		end)
 		C.setEnabled(b, unlocked)
-		local _ = enemyId
 	end
-	-- preview
+	-- preview on parchment
 	local enemyId, kind = Stages.enemyFor(zone, stage)
 	local def = Pets[enemyId]
 	local enemy = Builder.buildEnemy(enemyId, zone, stage, { side = "B", slot = 1 })
 	local rewards = Stages.rewards(zone, stage)
 	local mine = State.teamPet()
 	local lines = {
-		string.format("%s  (%s)", def.displayName, kind),
 		string.format(
-			"%s %s  Lv%d  Power %s",
+			"%s  (%s)   %s %s  Lv%d   Power %s",
+			def.displayName,
+			kind,
 			def.element,
 			def.role,
 			enemy.level,
@@ -111,35 +114,23 @@ local function refresh(ctx)
 			enemy.spd
 		),
 		def.skill and ("Skill: " .. Skills[def.skill].displayName) or "No skill",
-		"",
 		string.format(
 			"Rewards: %d coins, %d xp%s",
 			rewards.coins,
 			rewards.xp,
-			(p.stages[Stages.key(zone, stage)] or 0) == 0
-					and (", first clear +" .. rewards.firstClearGems .. " gems")
-				or ""
+			if (p.stages[Stages.key(zone, stage)] or 0) == 0
+				then ("   FIRST CLEAR: +" .. rewards.firstClearGems .. " gems")
+				else ""
 		),
 	}
 	if mine then
 		local myDef = Pets[mine.petId]
-		local myPower = Formulas.power(Formulas.finalStats(myDef, mine, State.globalMult()))
 		local matchup = Elements.multiplier(myDef.element, def.element)
-		local hint = matchup > 1 and "Your element is STRONG here"
-			or (
-				matchup < 1 and "Your element is WEAK here - consider another pet"
-				or "Neutral matchup"
-			)
-		table.insert(lines, "")
-		table.insert(
-			lines,
-			string.format(
-				"Your %s: Power %s   %s",
-				State.petName(mine),
-				Formulas.formatNumber(myPower),
-				hint
-			)
-		)
+		local hint = if matchup > 1
+			then "Your element is STRONG here"
+			elseif matchup < 1 then "Your element is WEAK here - another pet may do better"
+			else "Neutral matchup"
+		table.insert(lines, hint)
 	end
 	ui.preview.Text = table.concat(lines, "\n")
 	ui.fight.Text = "FIGHT " .. zone .. "-" .. stage
@@ -157,39 +148,72 @@ function Screen.build(host, ctx)
 	local C, Theme = ctx.C, ctx.Theme
 	local root = C.panel({
 		Name = "Stages",
-		Size = UDim2.fromOffset(860, 460),
+		Size = UDim2.fromScale(0.94, 0.92),
 		Position = UDim2.fromScale(0.5, 0.5),
 		AnchorPoint = Vector2.new(0.5, 0.5),
 		Parent = host,
 	}, "Battle Gate")
-	ui.tabs = C.frame({
-		Size = UDim2.new(1, -16, 0, 30),
-		Position = UDim2.fromOffset(8, 38),
+	C.new("UISizeConstraint", { MaxSize = Vector2.new(880, 560), Parent = root })
+
+	local content = C.frame({
+		Name = "Content",
+		Size = UDim2.new(1, 0, 1, -34),
+		Position = UDim2.fromOffset(0, 32),
 		BackgroundTransparency = 1,
 		Parent = root,
 	})
-	C.list(ui.tabs, 6, Enum.FillDirection.Horizontal)
-	ui.grid = C.frame({
-		Size = UDim2.fromOffset(520, 150),
-		Position = UDim2.fromOffset(8, 76),
+	C.padding(content, 10)
+	C.list(content, 8)
+
+	ui.tabs = C.frame({
+		Name = "Tabs",
+		Size = UDim2.new(1, 0, 0, 32),
 		BackgroundTransparency = 1,
-		Parent = root,
+		Parent = content,
+	})
+	C.list(ui.tabs, 6, Enum.FillDirection.Horizontal, Enum.HorizontalAlignment.Center)
+
+	ui.grid = C.scroll({
+		Name = "StageGrid",
+		Size = UDim2.new(1, 0, 0, 148),
+		BackgroundTransparency = 1,
+		Parent = content,
 	})
 	C.grid(ui.grid, 96, 64, 6)
+
+	local sheet = C.frame({
+		Name = "PreviewSheet",
+		Size = UDim2.new(1, 0, 0, 118),
+		BackgroundColor3 = Theme.Colors.parchment,
+		Parent = content,
+	})
+	C.bevel(sheet)
 	ui.preview = C.label({
-		Size = UDim2.new(1, -16, 0, 150),
-		Position = UDim2.fromOffset(8, 240),
-		TextSize = 10,
-		Parent = root,
+		Name = "Preview",
+		Size = UDim2.new(1, -16, 1, -10),
+		Position = UDim2.fromOffset(8, 5),
+		Text = "",
+		TextSize = 9,
+		TextColor3 = Theme.Colors.textDark,
+		Parent = sheet,
+	})
+
+	ui.fightHint = C.label({
+		Name = "FightHint",
+		Size = UDim2.new(1, 0, 0, 14),
+		Text = "",
+		TextSize = 8,
+		TextColor3 = Theme.Colors.accent,
+		TextXAlignment = Enum.TextXAlignment.Center,
+		Parent = content,
 	})
 	ui.fight = C.button({
 		Name = "FightButton",
-		Size = UDim2.fromOffset(300, 48),
-		Position = UDim2.new(1, -316, 0, 84),
+		Size = UDim2.new(1, 0, 0, 54),
 		Text = "FIGHT",
 		BackgroundColor3 = Theme.Colors.bad,
-		TextSize = 14,
-		Parent = root,
+		TextSize = 15,
+		Parent = content,
 	}, function()
 		C.setEnabled(ui.fight, false)
 		local ok, err = ctx.Net.invoke("StartStage", zone, stage)
@@ -197,33 +221,6 @@ function Screen.build(host, ctx)
 			ctx.toast(err, "bad")
 			C.setEnabled(ui.fight, true)
 		end
-	end)
-	ui.fightHint = C.label({
-		Name = "FightHint",
-		Size = UDim2.fromOffset(300, 18),
-		Position = UDim2.new(1, -316, 0, 136),
-		Text = "",
-		TextSize = 8,
-		TextColor3 = Theme.Colors.accent,
-		TextXAlignment = Enum.TextXAlignment.Center,
-		Parent = root,
-	})
-	C.label({
-		Size = UDim2.fromOffset(300, 80),
-		Position = UDim2.new(1, -316, 0, 160),
-		Text = "Fully automatic combat. Pick the right element, level up, or bring relics from expeditions. Stars: clear / finish above 50% HP / finish under 30s.",
-		TextSize = 8,
-		TextColor3 = Theme.Colors.textDim,
-		Parent = root,
-	})
-	C.button({
-		Size = UDim2.fromOffset(28, 24),
-		Position = UDim2.new(1, -31, 0, 3),
-		Text = "X",
-		BackgroundColor3 = Theme.Colors.bad,
-		Parent = root,
-	}, function()
-		ctx.Screens.close()
 	end)
 	ctx.State.onKeys({ "stages", "team", "pets" }, function()
 		if root.Visible then
@@ -233,26 +230,19 @@ function Screen.build(host, ctx)
 	return root
 end
 
-function Screen.onOpen(frame, arg)
+-- The zone/stage this screen is on (the battle result actions use it for "Next").
+function Screen.current(): (number, number)
+	return zone, stage
+end
+
+function Screen.onOpen(_frame, arg)
 	local p = Screen.ctx.State.profile
 	if type(arg) == "table" then
 		zone, stage = arg.zone, arg.stage
 	else
-		-- jump to the furthest open stage
-		for z = #Stages.Zones, 1, -1 do
-			if Stages.isZoneUnlocked(z, p.stages) then
-				zone = z
-				stage = firstOpenStage(p.stages, z)
-				break
-			end
-		end
+		zone, stage = Stages.nextStage(p.stages) -- the frontier
 	end
 	refresh(Screen.ctx)
-	local _ = frame
-end
-
-function Screen.current()
-	return zone, stage
 end
 
 return Screen

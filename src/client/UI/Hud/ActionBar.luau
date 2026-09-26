@@ -120,7 +120,19 @@ function ActionBar.build(root, ctx)
 	end
 	State.onKeys(ActionBar.KEYS, refresh)
 	refresh()
-	return { chip = chip, battle = battle, refresh = refresh }
+	local api = { chip = chip, battle = battle, refresh = refresh }
+	-- Portrait: the chip and BATTLE sit in one row above the dock. Landscape: dock between them.
+	function api.relayout(portrait: boolean, dockHeight: number)
+		if portrait then
+			local bottom = dockHeight + 8
+			chip.Position = UDim2.new(0, 10, 1, -(bottom + 60))
+			battle.Position = UDim2.new(1, -10, 1, -(bottom + 62))
+		else
+			chip.Position = UDim2.new(0, 10, 1, -66)
+			battle.Position = UDim2.new(1, -186, 1, -68)
+		end
+	end
+	return api
 end
 
 return ActionBar
