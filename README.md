@@ -70,7 +70,7 @@ rojo serve default.project.json         # 或：在 Roblox Studio 中用 Rojo �
 
 ## Studio 验证清单（首次实机）
 
-1. `rojo build default.project.json -o VoxelPets.rbxl` → Studio 打开 → 游戏设置里开启 **Enable Studio Access to API Services**（ProfileStore / MemoryStore / MessagingService 需要）。
+1. `rojo build default.project.json -o VoxelPets.rbxl` → Studio 直接打开即可测大部分条目（未开 API 访问时 ProfileStore 自动切内存模式：能玩但不存档；竞技场只有机器人、公告仅本服）。要测存档（第 10 条）与真实竞技场榜：先 **File → Publish to Roblox**（未发布的 place 无法改安全设置），再到 Game Settings → Security 开启 **Enable Studio Access to API Services**。
 2. 输出窗口应看到 `[VoxelPets] server ready` 与 `[VoxelPets] client ready`；若 `src/shared` 的字符串相对 `require("./X")` 报错，说明当前 Studio 不支持字符串 require，需要改回实例路径。
 3. 出生点周围 9 个发光柱子 = 站点，靠近按 E 打开对应界面；左侧菜单也能打开全部界面。
 4. Stages → 1-1 → 观察镜头切到 (0,300,0) 的战斗舞台、HP 条 / 日志 / 结算，1×/2×/3× 与 Skip 可用；胜利后 Next 连续推图。
