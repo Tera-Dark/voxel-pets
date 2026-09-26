@@ -221,6 +221,12 @@ function ClientMock.new(M, root, opts)
 		Cancel = function() end,
 		Pause = function() end,
 	}
+	Impl.Sound = {
+		Play = function() end,
+		Stop = function() end,
+		Pause = function() end,
+		Resume = function() end,
+	}
 	Impl.RemoteFunction = {
 		InvokeServer = function(obj, ...)
 			local name = st(obj).props.Name
