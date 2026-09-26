@@ -26,10 +26,13 @@ function Signal:Connect(fn)
 	return conn
 end
 local ACTIVE_SCHEDULER = nil -- set by Mock.new({ scheduler = true })
+-- Scheduler mode mirrors Roblox's default "Deferred" SignalBehavior: handlers are queued and run
+-- after the firing thread yields (NOT inside Fire). This ordering hid a real bug once: data
+-- mutated in a PlayerLoaded handler after the initial replication never reached the client.
 function Signal:Fire(...)
 	for _, fn in table.clone(self.handlers) do
 		if ACTIVE_SCHEDULER then
-			ACTIVE_SCHEDULER:spawn(fn, ...)
+			ACTIVE_SCHEDULER:delay(0, fn, ...)
 		else
 			fn(...)
 		end

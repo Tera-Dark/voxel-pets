@@ -206,6 +206,7 @@ do
 		Mock.Enum.MessageType.MessageError
 	)
 	M.services.LogService.MessageOut:Fire("plain print", Mock.Enum.MessageType.MessageOutput)
+	M.advance(0.05) -- signal handlers are deferred (Roblox default)
 	local sent = M.sent("DevLog", p)
 	check(#sent == 2, "errors forwarded, prints ignored (" .. #sent .. ")")
 	local entry = sent[#sent] and sent[#sent][1] and sent[#sent][1][1]

@@ -72,7 +72,178 @@ noNewErrors("boot")
 
 local Screens = CM.require("src/client/UI/ScreenManager.luau")
 local State = CM.require("src/client/State.luau")
+local Highlight = CM.require("src/client/UI/Highlight.luau")
 check(State.loaded and State.profile and next(State.profile.pets) ~= nil, "profile with starter")
+
+local function named(name)
+	return CM.find(function(d)
+		return d.Name == name and CM.visible(d)
+	end)
+end
+local function dockIds()
+	local ids = {}
+	for _, d in CM.descendants() do
+		if string.sub(d.Name, 1, 5) == "Dock_" and CM.visible(d) then
+			table.insert(ids, string.sub(d.Name, 6))
+		end
+	end
+	table.sort(ids)
+	return table.concat(ids, ",")
+end
+local function highlightTarget()
+	local target = Highlight.current()
+	return target and target.Name or nil
+end
+local function goalText()
+	local g = named("GoalTracker")
+	return g and CM.text(g:FindFirstChild("Goal")) or ""
+end
+
+-- ---------------------------------------------------------------- first-time HUD
+print("first-time HUD (progressive unlock)")
+do
+	check(dockIds() == "Pets", "a new player's dock holds just Pets: " .. dockIds())
+	check(named("BattleButton") ~= nil, "BATTLE is the big entry point (not a dock tile)")
+	check(named("Pill_coins") ~= nil and named("Pill_gems") ~= nil, "coins + gems pills")
+	check(named("Pill_essence") == nil, "no wall of zero currencies")
+	CM.click(named("MoreCurrencies"), 0.2)
+	local drop = named("CurrencyDrop")
+	check(drop ~= nil and CM.byText("Essence", nil, drop) ~= nil, "+ reveals other currencies")
+	check(
+		drop ~= nil and CM.byText("Tickets", nil, drop) == nil,
+		"locked-feature currencies stay hidden"
+	)
+	CM.click(named("MoreCurrencies"), 0.2)
+	check(named("CurrencyDrop") == nil, "+ collapses again")
+	check(named("SettingsButton") ~= nil, "settings gear")
+	check(CM.byText("Choose your partner!") ~= nil, "partner picker opens for a new player")
+	check(
+		goalText() == "Choose your partner",
+		"goal tracker: choose partner (" .. goalText() .. ")"
+	)
+	noNewErrors("first-time HUD")
+end
+
+-- ---------------------------------------------------------------- tutorial
+print("tutorial")
+do
+	local choose = CM.find(function(d)
+		return d.Name == "Choose"
+			and d.Parent
+			and d.Parent.Name == "Starter_Tidefrog"
+			and CM.visible(d)
+	end)
+	check(choose ~= nil, "Tidefrog card has CHOOSE")
+	CM.click(choose, 0.6)
+	local p = State.profile
+	check(p.pets[p.team["1"]].petId == "Tidefrog", "partner swapped to Tidefrog")
+	check(p.tutorialStep == 1, "tutorial step 1")
+	check(CM.byText("Choose your partner!") == nil, "picker closed")
+	check(goalText() == "Win your first battle", "goal: first battle (" .. goalText() .. ")")
+	check(
+		highlightTarget() == "BattleButton",
+		"pointer on BATTLE (" .. tostring(highlightTarget()) .. ")"
+	)
+
+	CM.click(named("BattleButton"), 0.6)
+	check(Screens.current() == "Stages", "BATTLE opens the stage list")
+	check(
+		highlightTarget() == "FightButton",
+		"pointer on FIGHT (" .. tostring(highlightTarget()) .. ")"
+	)
+	CM.click(named("FightButton"), 1)
+	check(Screens.current() == "Battle", "battle plays")
+	CM.click(CM.byText("SKIP", "TextButton"), 2)
+	CM.click(CM.byText("Close", "TextButton"), 0.6)
+	check(State.profile.tutorialStep == 2, "win -> step 2")
+	check(dockIds() == "Hatch,Pets", "Hatch unlocked after the first win: " .. dockIds())
+	local hatchItem = named("Dock_Hatch")
+	check(hatchItem and hatchItem.New.Visible, "Hatch shows NEW")
+	check(hatchItem and hatchItem.Badge.Visible, "Hatch badge: free egg waiting")
+	check(
+		highlightTarget() == "Dock_Hatch",
+		"pointer on Hatch (" .. tostring(highlightTarget()) .. ")"
+	)
+
+	CM.click(hatchItem, 0.8)
+	check(Screens.current() == "Hatch", "Hatch opened from the dock")
+	check(
+		highlightTarget() == "HatchFree",
+		"pointer on the free hatch (" .. tostring(highlightTarget()) .. ")"
+	)
+	local coins = State.profile.coins
+	CM.click(named("HatchFree"), 1)
+	check(CM.byText("Hatched!") ~= nil, "hatch result")
+	check(State.profile.coins == coins and State.profile.freeHatches == 0, "free egg cost nothing")
+	CM.run(function()
+		CM.require("src/client/UI/Components.luau").closeTopModal()
+	end, 0.3)
+	check(CM.byText("Hatched!") == nil, "Esc path closes the top window")
+	CM.run(function()
+		Screens.close()
+	end, 0.4)
+	check(State.profile.tutorialStep == 3, "hatch -> step 3")
+	check(string.find(dockIds(), "Codex", 1, true) ~= nil, "Codex unlocked by the first hatch")
+	check(goalText() == "Win stage 1-2", "goal: 1-2 (" .. goalText() .. ")")
+
+	CM.click(named("BattleButton"), 0.6)
+	check(CM.byText("FIGHT 1-2", "TextButton") ~= nil, "BATTLE jumps to the next stage (1-2)")
+	local gems = State.profile.gems
+	CM.click(named("FightButton"), 1)
+	CM.click(CM.byText("SKIP", "TextButton"), 2)
+	CM.click(CM.byText("Close", "TextButton"), 0.8)
+	check(State.profile.tutorialStep == 4, "tutorial complete")
+	check(State.profile.gems >= gems + 50, "tutorial reward")
+	check(CM.byText("Tutorial complete!") ~= nil, "celebration shown")
+	check(highlightTarget() == nil, "pointer gone")
+	check(dockIds() == "Codex,Hatch,Pets,Quests,Shop", "Quests + Shop open: " .. dockIds())
+	local goalTitle = CM.text(named("GoalTracker"):FindFirstChild("Title"))
+	check(
+		string.find(goalTitle, "CAMP", 1, true) ~= nil,
+		"next goal points at Camp (" .. goalTitle .. ")"
+	)
+	check(goalText() == "Clear stage 1-3", "goal line says how (" .. goalText() .. ")")
+	CM.click(CM.byText("LET'S GO", "TextButton"), 0.3)
+	noNewErrors("tutorial")
+end
+
+-- ---------------------------------------------------------------- dock behaviour + unlocks
+print("dock")
+do
+	CM.click(named("DockToggle"), 0.2)
+	check(named("Dock_Pets") == nil, "dock collapses")
+	check(CM.text(named("DockToggle")) == "^  MENU", "collapsed dock leaves a MENU tab")
+	CM.click(named("DockToggle"), 0.2)
+	check(named("Dock_Pets") ~= nil, "dock expands again")
+	CM.click(named("Dock_Pets"), 0.6)
+	check(
+		Screens.current() == "Pets" and named("Dock_Pets") == nil,
+		"dock steps aside while a screen is open"
+	)
+	CM.run(function()
+		Screens.close()
+	end, 0.3)
+	check(named("Dock_Pets") ~= nil, "closing the screen brings the dock back")
+	local stages = {}
+	for s = 1, 3 do
+		stages["1-" .. s] = 3
+	end
+	M.advance(6) -- real pacing: nobody clears 1-3 within seconds of finishing the tutorial
+	give({ stages = stages })
+	check(string.find(dockIds(), "Camp", 1, true) ~= nil, "Camp unlocks at 1-3")
+	M.advance(0.8) -- banners wait a moment (see HUD.unlockBanners)
+	check(CM.byText("NEW: Camp unlocked!") ~= nil, "unlock banner")
+	check(named("Dock_Camp").New.Visible, "Camp shows NEW")
+	local all = {}
+	for zz = 1, 2 do
+		for s = 1, 10 do
+			all[zz .. "-" .. s] = 3
+		end
+	end
+	give({ stages = all })
+	check(#string.split(dockIds(), ",") == 9, "everything open late game (9 tiles): " .. dockIds())
+	noNewErrors("dock")
+end
 
 -- ---------------------------------------------------------------- every screen opens
 print("screens")
@@ -292,7 +463,7 @@ do
 	CM.run(function()
 		Screens.close()
 	end, 0.2)
-	CM.click(button("Settings"), 0.4)
+	CM.click(named("SettingsButton"), 0.4)
 	local toggle = button("Auto-skip battles")
 	check(toggle ~= nil, "settings modal")
 	if toggle then

@@ -295,6 +295,61 @@ do
 	check(okLb and type(rows) == "table", "leaderboard callable")
 end
 
+print("tutorial + starter choice + free egg")
+do
+	local Tutorial = M.load("src/shared/Config/Tutorial.luau")
+	local newbie = M.join(1005, "Newbie")
+	local nd = Data.Get(newbie)
+	check(
+		nd.tutorialStep == 0 and nd.freeHatches == 1,
+		"fresh profile: tutorial at 0, one free hatch"
+	)
+	local starterUid = nd.team["1"]
+	local target = nil
+	for _, id in PetService.STARTERS do
+		if id ~= nd.pets[starterUid].petId then
+			target = id
+		end
+	end
+	check(not M.invoke("ChooseStarter", newbie, "NotAPet"), "unknown starter rejected")
+	local okC, errC = M.invoke("ChooseStarter", newbie, target)
+	check(okC, "ChooseStarter: " .. tostring(errC))
+	check(
+		nd.pets[starterUid].petId == target and nd.codex[target] ~= nil,
+		"starter swapped in place"
+	)
+	check(nd.tutorialStep == 1, "step 1 recorded")
+	check(not M.invoke("ChooseStarter", newbie, target), "starter can only be chosen once")
+	local okS1 = M.invoke("StartStage", newbie, 1, 1)
+	check(okS1 and (nd.stages["1-1"] or 0) > 0 and nd.tutorialStep == 2, "win 1-1 -> step 2")
+	local coinsBefore = nd.coins
+	local okH, errH, res = M.invoke("HatchEgg", newbie, "MeadowEgg", 1)
+	check(okH, "free hatch: " .. tostring(errH))
+	check(
+		nd.coins == coinsBefore and nd.freeHatches == 0,
+		"free hatch costs nothing and is used up"
+	)
+	check(
+		okH and Pets[res[1].petId].element ~= Pets[nd.pets[starterUid].petId].element,
+		"free egg brings a second element"
+	)
+	check(nd.tutorialStep == 3, "hatch -> step 3")
+	local gemsBefore = nd.gems
+	M.advance(11)
+	local okS2 = M.invoke("StartStage", newbie, 1, 2)
+	check(okS2 and nd.tutorialStep == Tutorial.COUNT, "win 1-2 completes the tutorial")
+	check(nd.gems >= gemsBefore + Tutorial.REWARD.gems, "completion reward paid")
+	check(nd.tutorialRewarded == true, "reward flagged")
+
+	local skipper = M.join(1006, "Skipper")
+	check(M.invoke("TutorialSkip", skipper), "skip accepted")
+	check(Data.Get(skipper).tutorialStep == Tutorial.SKIPPED, "skip recorded")
+	check(
+		not M.invoke("ChooseStarter", skipper, PetService.STARTERS[1]),
+		"no starter swap after skipping"
+	)
+end
+
 print("quests + daily + prestige")
 do
 	check((d.quests.progress.battlesWon or 0) >= 5, "quest progress tracked")

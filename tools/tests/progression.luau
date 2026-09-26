@@ -1,5 +1,6 @@
 --!nonstrict
--- Suite: egg odds + hatch rolls, pet instance progression and codex bonuses.
+-- Suite: egg odds + hatch rolls, pet instance progression, codex bonuses, feature unlocks
+-- and the tutorial state machine.
 local Pets = require("../../src/shared/Config/Pets")
 local Rarities = require("../../src/shared/Config/Rarities")
 local Eggs = require("../../src/shared/Config/Eggs")
@@ -8,6 +9,8 @@ local Rng = require("../../src/shared/Combat/Rng")
 local Hatch = require("../../src/shared/Progression/Hatch")
 local PetInstance = require("../../src/shared/Progression/PetInstance")
 local Codex = require("../../src/shared/Progression/Codex")
+local Features = require("../../src/shared/Config/Features")
+local Tutorial = require("../../src/shared/Config/Tutorial")
 
 return function(check, near)
 	print("eggs + hatch")
@@ -122,5 +125,121 @@ return function(check, near)
 		end
 		check(Codex.isZoneComplete(codex, 1), "zone 1 complete")
 		check(Codex.bonusMult(codex) > 1.03, "zone bonus applied")
+	end
+	print("features (progressive unlock)")
+	do
+		local fresh = { stages = {}, stats = { hatches = 0 } }
+		local open = {}
+		for _, f in Features.unlocked(fresh) do
+			table.insert(open, f.id)
+		end
+		check(
+			table.concat(open, ",") == "Stages,Pets",
+			"new player sees only Battle + Pets: " .. table.concat(open, ",")
+		)
+		check(Features.nextLocked(fresh).id == "Hatch", "Hatch unlocks next")
+		check(Features.requirement("Camp") == "Clear stage 1-3", "requirement text")
+		check(Features.requirement("Codex") == "Hatch your first egg", "hatch requirement text")
+		local mid = { stages = { ["1-1"] = 3, ["1-2"] = 2, ["1-3"] = 1 }, stats = { hatches = 1 } }
+		for _, id in { "Hatch", "Codex", "Quests", "Shop", "Camp" } do
+			check(Features.isUnlocked(mid, id), id .. " unlocked at 1-3 + 1 hatch")
+		end
+		check(not Features.isUnlocked(mid, "Expedition"), "Expedition still locked at 1-3")
+		check(Features.nextLocked(mid).id == "Expedition", "Expedition is next after Camp")
+		local seen, groups = {}, {}
+		for _, f in Features.LIST do
+			check(not seen[f.id], "unique feature id " .. f.id)
+			seen[f.id] = true
+			groups[f.group] = true
+			check(
+				type(f.icon) == "string" and type(f.blurb) == "string",
+				f.id .. " has icon + blurb"
+			)
+		end
+		for _, g in Features.GROUP_ORDER do
+			check(groups[g], "group " .. g .. " used")
+		end
+		-- dock order keeps groups contiguous
+		local last, order = nil, {}
+		for _, f in Features.LIST do
+			if f.group ~= last then
+				check(not order[f.group], "group " .. f.group .. " contiguous in dock order")
+				order[f.group] = true
+				last = f.group
+			end
+		end
+		local all = { stages = {}, stats = { hatches = 9 } }
+		for z = 1, 3 do
+			for st = 1, 10 do
+				all.stages[z .. "-" .. st] = 3
+			end
+		end
+		check(
+			#Features.unlocked(all) == #Features.LIST and Features.nextLocked(all) == nil,
+			"everything open late game"
+		)
+	end
+
+	print("next stage (frontier)")
+	do
+		local Stages = require("../../src/shared/Config/Stages")
+		local z, st = Stages.nextStage({})
+		check(z == 1 and st == 1, "fresh -> 1-1")
+		z, st = Stages.nextStage({ ["1-1"] = 3, ["1-2"] = 1 })
+		check(z == 1 and st == 3, "after 1-2 -> 1-3")
+		local zone1 = {}
+		for i = 1, 10 do
+			zone1["1-" .. i] = 2
+		end
+		z, st = Stages.nextStage(zone1)
+		check(z == 2 and st == 1, "zone boss cleared -> 2-1")
+		local all = {}
+		for zz = 1, #Stages.Zones do
+			for i = 1, 10 do
+				all[zz .. "-" .. i] = 3
+			end
+		end
+		z, st = Stages.nextStage(all)
+		check(z == #Stages.Zones and st == 10, "everything cleared -> last stage")
+	end
+
+	print("tutorial state machine")
+	do
+		local function profile(step)
+			return {
+				tutorialStep = step,
+				stages = {},
+				stats = { hatches = 0 },
+				team = { ["1"] = "p1" },
+				pets = { p1 = { level = 1 } },
+			}
+		end
+		local p = profile(0)
+		check(Tutorial.progress(p) == 0 and Tutorial.isActive(p), "waits for the starter choice")
+		check(Tutorial.current(p).id == "starter", "first step is the starter")
+		p.stages["1-1"] = 3 -- progress made before choosing does not skip the choice
+		check(Tutorial.progress(p) == 0, "starter choice cannot be skipped by progress")
+		p.tutorialStep = 1
+		check(Tutorial.progress(p) == 2, "1-1 already won counts immediately")
+		p.tutorialStep = 2
+		check(Tutorial.current(p).id == "hatch", "then hatch the free egg")
+		p.stats.hatches = 1
+		check(Tutorial.progress(p) == 3, "first hatch completes the hatch step")
+		p.stages["1-2"] = 1
+		check(Tutorial.progress(p) == Tutorial.COUNT, "hatch + 1-2 finish the tutorial")
+		p.tutorialStep = Tutorial.COUNT
+		check(
+			not Tutorial.isActive(p) and Tutorial.current(p) == nil,
+			"finished tutorial is inactive"
+		)
+		local skipped = profile(Tutorial.SKIPPED)
+		check(
+			Tutorial.progress(skipped) == Tutorial.SKIPPED and not Tutorial.isActive(skipped),
+			"skip sticks"
+		)
+		local ordered = profile(2)
+		ordered.stages["1-2"] = 1 -- later step done, earlier not: stays on the hatch step
+		check(Tutorial.progress(ordered) == 2, "steps complete in order")
+		check(Tutorial.COUNT == 4, "four steps")
 	end
 end

@@ -604,6 +604,21 @@ function ClientMock.new(M, root, opts)
 		return tostring(st(obj).props.Text or "")
 	end
 
+	-- ---------------------------------------------------------------- UI snapshot export
+	function CM.setViewport(w, h)
+		I.setViewport(w, h)
+		local sig = st(Workspace.CurrentCamera).propSignals.ViewportSize
+		if sig then
+			sig:Fire()
+		end
+	end
+
+	local GuiDump = require("./mock/gui_dump")(st, propInfo, typeofX)
+	-- Serializable tree of every ScreenGui in PlayerGui (+ viewport) for the PNG renderer.
+	function CM.dumpGui()
+		return GuiDump.dump(playerGui, I.viewport)
+	end
+
 	return CM
 end
 

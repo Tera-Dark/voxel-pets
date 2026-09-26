@@ -4,11 +4,12 @@
 -- type-checked like Roblox, events are lazily created signals running on the shared scheduler.
 local DT = require("./datatypes")
 local typed, typeofX = DT.typed, DT.typeofX
-local v3, v2, cf, c3, udim, udim2 = DT.v3, DT.v2, DT.cf, DT.c3, DT.udim, DT.udim2
+local v3, v2, cf = DT.v3, DT.v2, DT.cf
 
 -- api: decoded roblox_api.json; scheduler: roblox_mock Scheduler; Enum: DT.buildEnum(api)
 return function(api, scheduler, Enum)
 	local classes = api.classes
+	local viewport = { 1280, 720 } -- CM.setViewport()
 
 	-- ------------------------------------------------------------ class metadata
 	local chainCache = {}
@@ -101,9 +102,9 @@ return function(api, scheduler, Enum)
 		coroutine.yield()
 		return table.unpack(fired, 1, fired.n)
 	end
-	function SignalMT:Fire(...)
+	function SignalMT:Fire(...) -- deferred, like Roblox's default SignalBehavior
 		for _, entry in table.clone(self.handlers) do
-			scheduler:spawn(entry.fn, ...)
+			scheduler:delay(0, entry.fn, ...)
 		end
 	end
 
@@ -155,129 +156,8 @@ return function(api, scheduler, Enum)
 		return table.concat(parts, ".")
 	end
 
-	local TRUE_DEFAULTS = {
-		Visible = true,
-		Enabled = true,
-		Archivable = true,
-		AutoButtonColor = true,
-		CanCollide = true,
-		CastShadow = true,
-		CanQuery = true,
-		CanTouch = true,
-		AutoLocalize = true,
-		ResetOnSpawn = true,
-		ClipsDescendants = false,
-	}
-	local NUM_DEFAULTS = {
-		TextSize = 14,
-		ZIndex = 1,
-		Thickness = 1,
-		TextStrokeTransparency = 1,
-		FieldOfView = 70,
-		MaxActivationDistance = 10,
-		ScrollBarThickness = 12,
-	}
-	local function defaultFor(className, key, ptype)
-		if ptype == "bool" then
-			if key == "Active" then
-				return isA(className, "GuiButton")
-			end
-			return TRUE_DEFAULTS[key] == true
-		elseif ptype == "int" or ptype == "int64" or ptype == "float" or ptype == "double" then
-			return NUM_DEFAULTS[key] or 0
-		elseif ptype == "string" or ptype == "Content" or ptype == "ContentId" then
-			return ""
-		elseif ptype == "Color3" then
-			return c3(0.64, 0.64, 0.65)
-		elseif ptype == "UDim2" then
-			return udim2(0, 0, 0, 0)
-		elseif ptype == "UDim" then
-			return udim(0, 0)
-		elseif ptype == "Vector2" then
-			return v2(0, 0)
-		elseif ptype == "Vector3" then
-			return if key == "Size" then v3(4, 1, 2) else v3(0, 0, 0)
-		elseif ptype == "CFrame" then
-			return cf(0, 0, 0)
-		elseif ptype == "Font" then
-			return setmetatable(
-				{ Family = "rbxasset://fonts/families/SourceSansPro.json" },
-				typed("Font")
-			)
-		elseif string.sub(ptype, 1, 5) == "Enum:" then
-			local e = api.enums[string.sub(ptype, 6)]
-			return e and Enum[string.sub(ptype, 6)][e[1]] or nil
-		end
-		return nil
-	end
-
-	local DATATYPES = {
-		Color3 = true,
-		UDim2 = true,
-		UDim = true,
-		Vector2 = true,
-		Vector3 = true,
-		CFrame = true,
-		Font = true,
-		TweenInfo = true,
-	}
-	-- Mirrors Roblox's property assignment checks. Returns the (possibly coerced) value.
-	local function checkValue(className, key, ptype, value)
-		local function bad()
-			error(
-				string.format(
-					"Unable to assign property %s. %s expected, got %s (%s)",
-					key,
-					ptype,
-					typeofX(value),
-					className
-				),
-				3
-			)
-		end
-		if ptype == "bool" then
-			if type(value) ~= "boolean" then
-				bad()
-			end
-		elseif ptype == "int" or ptype == "int64" or ptype == "float" or ptype == "double" then
-			if type(value) ~= "number" then
-				bad()
-			end
-		elseif ptype == "string" then
-			if type(value) == "number" then
-				return tostring(value)
-			elseif type(value) ~= "string" then
-				bad()
-			end
-		elseif DATATYPES[ptype] then
-			if typeofX(value) ~= ptype then
-				bad()
-			end
-		elseif string.sub(ptype, 1, 5) == "Enum:" then
-			local enumName = string.sub(ptype, 6)
-			if typeofX(value) == "EnumItem" then
-				if value.EnumType.Name ~= enumName then
-					bad()
-				end
-			elseif type(value) == "string" then
-				return Enum[enumName][value]
-			else
-				bad()
-			end
-		elseif string.sub(ptype, 1, 6) == "Class:" then
-			if
-				value ~= nil
-				and (not isInstance(value) or not isA(st(value).class, string.sub(ptype, 7)))
-			then
-				bad()
-			end
-		elseif ptype == "Callback" then
-			if value ~= nil and type(value) ~= "function" then
-				bad()
-			end
-		end
-		return value
-	end
+	local Props = require("./props")(api, Enum, isA, isInstance, st)
+	local defaultFor, checkValue = Props.defaultFor, Props.checkValue
 
 	local function setParent(obj, parent)
 		local s = st(obj)
@@ -350,8 +230,22 @@ return function(api, scheduler, Enum)
 			if key == "Position" and isA(s.class, "BasePart") then
 				local c = s.props.CFrame or cf(0, 0, 0)
 				return v3(c.X, c.Y, c.Z)
+			elseif key == "ViewportSize" then
+				return v2(viewport[1], viewport[2])
 			elseif key == "AbsoluteSize" then
-				return v2(1280, 720)
+				-- like Roblox: a GUI in an inset ScreenGui cannot use the top bar's 58 px
+				local o = s.parent
+				while o and st(o).class ~= "ScreenGui" do
+					o = st(o).parent
+				end
+				local inset = 0
+				if o then
+					local gp = st(o).props
+					local full = gp.IgnoreGuiInset == true
+						or (gp.ScreenInsets ~= nil and gp.ScreenInsets.Name == "None")
+					inset = if full then 0 else 58
+				end
+				return v2(viewport[1], viewport[2] - inset)
 			elseif key == "AbsolutePosition" then
 				return v2(0, 0)
 			elseif key == "TextBounds" then
@@ -679,5 +573,9 @@ return function(api, scheduler, Enum)
 		descendants = descendants,
 		destroy = destroy,
 		Impl = Impl,
+		setViewport = function(w, h)
+			viewport[1], viewport[2] = w, h
+		end,
+		viewport = viewport,
 	}
 end
