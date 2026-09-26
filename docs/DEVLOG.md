@@ -4,6 +4,39 @@
 
 ---
 
+## 2026-09-26 · Day 3 · 首次实机：卡在 "Loading your pets..." → 启动链路加固 + 客户端端到端模拟
+
+**阶段**：P0 收口（Studio 实机验证）　**状态**：已修复并加固，待项目所有者再次实机确认。全部门禁绿：单元 13,092 · 服务端冒烟 152 · 启动鲁棒性 43 · 客户端端到端 108 · API 校验 0 问题 · Selene 0 警告。
+
+### 现象
+项目所有者首次在 Studio 打开 `VoxelPets.rbxl` 运行：画面一直停在 "Loading your pets..."，无任何提示。
+
+### 根因分析（无法看到 Output 窗口，靠代码审计 + 复现）
+1. **服务端 Mock 替换了 ProfileStore**：真实存档路径从未被执行过。真实 ProfileStore 在 Studio 里用"错误信息字符串匹配"判断有无 DataStore 权限；一旦匹配不上（未发布 place 的报错文案变化），store 永远不会 ready，`StartSessionAsync` 永久阻塞 → 客户端永远等不到存档。我们的代码对此**没有任何超时**。
+2. **服务端启动无隔离**：任一服务模块加载时抛错会中断整个启动脚本，远程处理器全部注册不上，客户端 `InvokeServer` 永久挂起。竞技场在模块顶层调用 `MemoryStoreService:GetSortedMap`，在未发布的 place 中有此风险。
+3. **客户端静默等待**：加载循环只有 `while not loaded do wait end`，失败原因对测试者完全不可见。
+4. **Mock 调度器是同步的**：`task.delay` 立即执行、`task.wait` 直接报错，所有与时序相关的问题（超时、竞态、挂起）在 CI 中不可能暴露。
+
+### 修复与加固
+- **服务端启动 `Boot.luau`**：远程 → 世界 → 各服务 require → Start → Ready 每一步 xpcall 隔离；启动状态 / 当前阶段 / 错误列表写入 ReplicatedStorage 属性（`VP_ServerState / VP_BootStage / VP_BootErrors`）供客户端显示；服务缺失导致的无处理器远程统一回 "Unavailable right now"（不再让客户端挂起）。`Main.server.luau` 缩为一行，Lune 冒烟与真实服务器走同一启动路径。
+- **存档 `DataService`**：三种存档模式——线上 ProfileStore；Studio 有权限时用独立的 `PlayerData_studio_v1`（不碰线上存档）；Studio 无权限 / 未发布时用**内存离线存档**（能完整游玩、不保存，HUD 顶部显示 TEST MODE）。DataStore 探测 10 s 超时、会话打开 20 s 看门狗（Studio 回退离线、线上提示"等待中"）、迟到会话自动释放（不泄漏会话锁）、同一玩家防重复加载、所有服务 Start 完成后才开始加载玩家（避免错过 PlayerLoaded）。每个玩家的加载进度写入 `VP_LoadState`。
+- **竞技场**：MemoryStore 句柄惰性 + pcall 创建，不可用时回退机器人。
+- **客户端**：新的加载界面 `BootScreen`（连接 → 服务端 → 存档 三步清单 + 计时 + 12 s 后显示诊断信息 + 20 s 后提示截图）；`Net.invoke` 20 s 超时永不挂死；模块加载 / 每个界面构建 / 每段 UI 接线都有隔离，坏掉的界面显示错误面板而不是整体崩溃；`Components` 属性赋值失败只告警不抛错；战斗回放与跟随宠物的每帧循环出错不再每帧刷屏。
+- **屏幕开发者日志 `DevConsole`**（仅 Studio / 游戏所有者可见）：左下角 ERR/WARN 徽章，点开可看客户端错误 + 服务端转发的警告（`DevLog` 远程），**测试者一张截图就能报告问题**。
+
+### 新的测试层（全部进 CI）
+- `scripts/check_roblox_api.py` + `tools/data/roblox_api.json`：用 Roblox 官方 API Dump（0.740）校验所有属性表键名 / 枚举 / 服务名 / 可创建类（覆盖 1,391 个属性键；植入 10 类错误全部检出）。
+- `tools/boot_smoke.luau`：Mock 新增**虚拟时间协程调度器**，9 个场景复现"卡加载"的各种成因（玩家早于启动加入、未发布 place、探测永不返回、会话挂起、线上慢加载、服务崩溃、MemoryStore 不可用、重复 PlayerAdded、DevLog 转发）。
+- `tools/client_mock.luau` + `tools/client_smoke.luau`：**客户端运行时模拟器**——真实客户端脚本在 Lune 中运行，连到真实服务端代码；假 Instance 按 API Dump 校验成员与赋值类型，远程负载按 Roblox 序列化规则检查（混合表 / 稀疏数组 / 函数值）。覆盖启动、11 个界面、关卡战斗（跳过 + 实时回放）、孵蛋 + 概率弹窗、升级、营地、每日奖励、竞技场、商店、设置、**通过 UI 走完整局远征**、8 个界面全按钮点击模糊测试，以及"存档挂起""服务崩溃"两个失败场景下测试者看到的画面。
+- 另用 luau-lsp（真实 Roblox 类型定义）做了一次全量类型扫描：新代码 0 问题。
+
+### 下一步
+1. 项目所有者重新下载 `VoxelPets.rbxl` 实机运行：应在数秒内进入游戏并看到 TEST MODE 标识；有任何问题截图（加载界面或左下角 ERR 面板）。
+2. 实机通过后进入 P0 收口：战斗表现层（伤害数字 / 状态图标 / 蓄力条）、基础音效、新手引导。
+3. 并行：遗物补到 35、成就、2× 金币通行证、世界 Boss（均可在新的端到端模拟中自动验证）。
+
+---
+
 ## 2026-09-26 · Day 2.5 · 架构体检：超级文件拆分 + 鲁棒性加固
 
 **阶段**：P2 MVP 后整理　**状态**：全部门禁绿（StyLua ✓ · Selene 0 警告 ✓ · 单元测试 13,091/0 ✓ · 服务端冒烟 151/0 ✓ · rojo build ✓）。

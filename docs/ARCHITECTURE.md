@@ -27,6 +27,7 @@
 - 豁免（有意保留，评审需说明理由）：
   - `src/server/Vendor/ProfileStore.luau`（第三方 vendored，不格式化不 lint）；
   - `src/shared/Combat/Simulator.luau` 540 行 / 24 函数 —— 单一职责的战斗内核，函数粒度小、内聚高，强行拆分只会增加跨模块跳转。
+  - 测试基础设施（Day 3，均 < 700 行，已按职责拆分）：`tools/mock/instances.luau` 683（API 校验的假 Instance 系统）、`tools/client_mock.luau` 594（服务 / 远程桥接 / 模块加载）、`tools/roblox_mock.luau` 552（服务端 Mock）；`tools/mock/datatypes.luau` 469、`tools/mock/scheduler.luau` 86。
 
 ### 2026-09-26 架构体检结果
 
@@ -38,7 +39,33 @@
 | `client` 6 处 require | — | `require(ReplicatedStorage.Shared.X)` 内联与 `Shared` 局部变量两种写法混用；HUD 还有函数内懒 require | 统一为约定 2 |
 | `tools/roblox_mock.luau` 430、`Expedition/Run.luau` 425、`PetService.luau` 392 | — | 接近警告线 | 暂不动（函数粒度健康），复审时优先关注 |
 
-拆分后最大非 Vendor 文件 540 行（Simulator，豁免），其余全部 < 430 行。
+拆分后最大非 Vendor 游戏代码文件 540 行（Simulator，豁免），其余游戏代码全部 < 480 行（Day 3 复核）。
+
+## 启动与加载链路（Day 3 起）
+
+```
+服务端 Boot.run():  Remotes → DevLog → World → 13 个服务 require → Start() → Ready() → 补齐无处理器远程
+                    每步 xpcall 隔离；状态写 ReplicatedStorage 属性 VP_ServerState / VP_BootStage / VP_BootErrors
+DataService.Ready():选存档模式（store / studio store / offline）→ 连接 PlayerAdded + 处理已在线玩家
+玩家加载:           VP_LoadState = loading →(6 s)waiting →(Studio 20 s 回退离线) ready | failed；VP_SaveMode
+客户端 Main:        DevConsole + BootScreen 先起 → 受保护 require → connect → server → save 三步握手
+                    （每 3 s 补拉 GetProfile；12 s 显示诊断；20 s 提示截图）→ 分段接线 UI
+```
+
+- **绝不静默等待**：任何等待都有超时或可见状态；任何远程调用 20 s 超时（`Net.invoke`）。
+- **一处坏不影响全局**：服务、界面、每段 UI 接线、每帧循环都各自隔离；坏界面显示错误面板。
+- **测试者可见**：加载界面诊断 + 开发者日志徽章（Studio / 所有者）——一张截图定位问题。
+
+## 测试分层
+
+| 层 | 工具 | 覆盖 |
+|---|---|---|
+| 静态 | StyLua · Selene · `scripts/check_roblox_api.py`（API Dump 0.740）· luau-lsp（按需） | 格式、lint、属性 / 枚举 / 服务名 / 可创建类 |
+| 单元 | `tools/test.luau` + `tools/tests/*` | 共享层纯逻辑（13k+ 断言） |
+| 服务端冒烟 | `tools/server_smoke.luau`（同步 Mock） | 完整玩家旅程 |
+| 启动鲁棒性 | `tools/boot_smoke.luau`（虚拟时间调度） | 挂起 / 崩溃 / 回退 / 竞态 |
+| 客户端端到端 | `tools/client_mock.luau` + `tools/client_smoke.luau` | 真实客户端脚本 × 真实服务端：全部界面、主流程、按钮模糊测试、失败场景画面 |
+| 实机 | Roblox Studio（项目所有者） | 渲染、布局、镜头、输入、真实云服务 |
 
 ## 鲁棒性约定
 

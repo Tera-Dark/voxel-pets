@@ -6,7 +6,7 @@
 
 | 项目 | 状态 |
 |---|---|
-| 当前阶段 | **MVP 代码完成，待 Studio 实机验证**（共享层 / 服务端 / 客户端全部落地；13,091 项单元测试 + 151 项服务端冒烟通过） |
+| 当前阶段 | **MVP 代码完成，Studio 实机验证中**（首次实机卡加载已修复；单元 13,092 · 服务端冒烟 152 · 启动鲁棒性 43 · 客户端端到端 108 全部通过） |
 | 下一里程碑 | Studio 实机跑通验证清单 → 内部试玩（10 人）→ 表现层补齐 |
 | CI | ![CI](https://github.com/Tera-Dark/voxel-pets/actions/workflows/ci.yml/badge.svg) |
 | 引擎 / 语言 | Roblox Studio · Luau · Rojo |
@@ -46,8 +46,11 @@ voxel-pets/
 # 工具链（Windows/macOS 用 rokit: `rokit install`；Linux/CI 用脚本）
 ./scripts/install_tools.sh ~/bin && export PATH=~/bin:$PATH
 
-lune run tools/test                     # 13,091 项单元测试（tools/tests/ 五套件）
-lune run tools/server_smoke             # 151 项服务端冒烟（Roblox API Mock，完整玩家旅程）
+lune run tools/test                     # 13,092 项单元测试（tools/tests/ 五套件）
+lune run tools/server_smoke             # 152 项服务端冒烟（Roblox API Mock，完整玩家旅程）
+lune run tools/boot_smoke               # 43 项启动鲁棒性（虚拟时间调度：挂起 / 崩溃 / 回退场景）
+lune run tools/client_smoke             # 108 项客户端端到端（真实客户端脚本 × 真实服务端，全部界面 + 主流程）
+python3 scripts/check_roblox_api.py     # 属性 / 枚举 / 服务名对照 Roblox API Dump 校验
 lune run tools/sim_replay -- Emberfox ThornbackBoar 42 InsightLens   # 单场逐事件日志
 lune run tools/sim_batch -- --quick     # 平衡快照（胜率 / 时长矩阵；去掉 --quick 跑 N=1000）
 lune run tools/tune_roles               # 职业模板网格搜索
@@ -68,19 +71,34 @@ rojo serve default.project.json         # 或：在 Roblox Studio 中用 Rojo �
 | `src/server` | 13 个服务（存档 / 经济 / 灵宠 / 孵蛋 / 战斗 / 关卡 / 远征 / 营地 / 任务 / 轮回 / 公告 / 商业化 / 竞技场）+ 灰盒枢纽世界生成 |
 | `src/client` | 像素风组件库、12 个界面、战斗舞台回放、程序化体素宠物模型、跟随宠物 |
 
-## Studio 验证清单（首次实机）
+## 实机测试指南（给项目所有者：不需要任何开发知识）
 
-1. `rojo build default.project.json -o VoxelPets.rbxl` → Studio 直接打开即可测大部分条目（未开 API 访问时 ProfileStore 自动切内存模式：能玩但不存档；竞技场只有机器人、公告仅本服）。要测存档（第 10 条）与真实竞技场榜：先 **File → Publish to Roblox**（未发布的 place 无法改安全设置），再到 Game Settings → Security 开启 **Enable Studio Access to API Services**。
-2. 输出窗口应看到 `[VoxelPets] server ready` 与 `[VoxelPets] client ready`；若 `src/shared` 的字符串相对 `require("./X")` 报错，说明当前 Studio 不支持字符串 require，需要改回实例路径。
-3. 出生点周围 9 个发光柱子 = 站点，靠近按 E 打开对应界面；左侧菜单也能打开全部界面。
-4. Stages → 1-1 → 观察镜头切到 (0,300,0) 的战斗舞台、HP 条 / 日志 / 结算，1×/2×/3× 与 Skip 可用；胜利后 Next 连续推图。
-5. Hatch → `Details (odds)` 弹窗应列出每只灵宠的精确百分比且合计 100%；买一颗 Meadow Egg。
-6. Camp 分配一只非出战宠 → 等 5 s 看 Pending 增长 → Collect。
-7. 通关 1-5 后 Expedition 可开：走一整层（战斗 / 遗物三选一 / 事件 / 商店 / 篝火 / Boss）。
-8. Arena：无其他玩家时应看到 3 个 `[BOT]`；打一场看评分变化。
-9. Quests / Shop / Codex / Prestige 打开无报错；Shop 里通行证与钻石包按钮显示 "Coming soon"（ID 为 0 占位，发布后填入 `MonetizationService.Passes/Products`）。
-10. 退出再进：存档保留；离开 ≥ 1 分钟再进应弹 "Welcome back!" 离线报告。
-11. 像素字体：若 Press Start 2P 不可用，`PixelTheme.font()` 回退到 Arcade，属预期。
+**每次测试只需 3 步：**
+1. 在工作区下载最新的 `VoxelPets.rbxl`，双击用 Roblox Studio 打开。
+2. 点顶部的 **Play（▶）**。
+3. 按下面的"应该看到"逐条体验；**任何不对劲就截图发给开发者**（截整个画面即可）。
+
+**应该看到：**
+- 几秒内加载界面的三行变成 `[OK]` 并进入游戏；屏幕顶部有红色小条 **TEST MODE - progress is not saved**（本地测试不存档，属正常）。
+- 身后跟着一只方块宠物；左侧是菜单（Pets / Battle / Hatch / Camp / ...），出生点周围有 9 个发光柱子，走近按 **E** 打开对应界面。
+- **Battle**：选关卡点 FIGHT → 镜头切到战斗舞台自动开打；可用 1×/2×/3× 和 SKIP；赢了点 Next 继续。
+- **Hatch**：先点 `Details (odds)` 看概率（每只宠物都有百分比，合计 100%），再孵一颗蛋。
+- **Camp**：点 `+ assign pet` 派一只宠物打工，等一会儿点 COLLECT。
+- 通关 1-5 后 **Expedition** 解锁：走一整层（战斗 / 选遗物 / 事件 / 商店 / 篝火 / Boss）。
+- **Arena / Quests / Shop / Codex / Prestige** 都能打开；在 Shop 点 Robux 商品会提示 "Coming soon" 属正常（还没上架）。
+
+**出问题时怎么截图：**
+- 卡在加载界面 → 等 20 秒，界面会显示诊断信息，直接截图。
+- 游戏里左下角出现红色 **ERR** 按钮 → 点一下打开开发者日志，截图。
+- 某个界面显示 "could not open" → 截图。
+
+<details><summary>开发者附注（Studio 高级设置）</summary>
+
+- 想测试存档：File → Publish to Roblox 发布，然后 Game Settings → Security 开启 **Enable Studio Access to API Services**；此时 Studio 使用独立存档 `PlayerData_studio_v1`（不影响线上），TEST MODE 标识消失。
+- 若 `src/shared` 的字符串 `require("./X")` 在某 Studio 版本不支持，客户端加载界面会显示 "game scripts failed to load"。
+- 通行证 / 开发者商品 ID 为 0 占位，发布后填入 `MonetizationService.Passes/Products`。
+- 像素字体 Press Start 2P 不可用时 `PixelTheme.font()` 回退到 Arcade，属预期。
+</details>
 
 ## 版权
 

@@ -23,3 +23,6 @@
 | D-17 | 2026-09-26 | 已定 | 客户端 UI 技术路线 | Roact/Fusion / 原生 Instance 组件库 | **原生 Instance + 自研极简组件库**（`Components.luau`） | MVP 期零依赖、Lune 无法跑 UI 故越简单越好；界面模块统一 `build/onOpen/onClose` 契约，后续可整体迁移 |
 | D-18 | 2026-09-26 | 已定 | 服务端可测性 | 仅 Studio 手测 / Roblox API Mock 冒烟 | **Mock 冒烟**（`tools/roblox_mock.luau` + `server_smoke`） | 全部服务在 CI 内跑完整玩家旅程；代价是 Mock 与真实 API 行为差异需在 Studio 复核 |
 | D-19 | 2026-09-26 | 已定 | 代码规模与入参校验规范 | 无红线随缘 / 立规执行 | **单文件 ≤500 行（700 强拆）、单函数 ≤80 行；测试按领域分套件；远程入参校验纯逻辑下沉 `shared/Validate`** | 实测巨文件（test 746 / Expedition 561 / Pets 单函数 260）拖慢改动与评审；校验下沉后 Lune 可测、服务零改动；`Simulator` 540 行为单一职责内核，记为有意豁免（见 ARCHITECTURE） |
+| D-20 | 2026-09-26 | 已定 | Studio 测试时的存档 | 一律 ProfileStore.Mock / 离线内存存档 + 独立 Studio 存档 | **线上 ProfileStore；Studio 有 DataStore 权限用独立 `PlayerData_studio_v1`；无权限 / 未发布用内存离线存档并在 HUD 显示 TEST MODE** | 首次实机卡加载的根因之一是存档就绪无超时；离线模式保证任何环境都能进游戏；独立 Studio 存档避免测试污染或会话锁冲突线上存档 |
+| D-21 | 2026-09-26 | 已定 | 测试者如何报告问题 | 教测试者看 Output 窗口 / 游戏内诊断 | **游戏内诊断**：加载界面三步清单 + 诊断信息；开发者日志徽章（仅 Studio / 所有者可见）汇总客户端错误与服务端警告 | 项目所有者是非开发者；一张截图即可定位问题，避免来回沟通 |
+| D-22 | 2026-09-26 | 已定 | 客户端代码如何在 CI 中验证 | 仅静态检查 / 客户端运行时模拟器 | **客户端运行时模拟器**（`client_mock`：API Dump 校验的假 Instance + 与真实服务端代码直连 + 远程序列化检查）+ API Dump 静态校验 | 5k 行客户端代码此前从未执行过；模拟器能在交给测试者之前发现运行时错误。代价：不模拟渲染 / 布局 / 输入，这些仍需实机确认 |
