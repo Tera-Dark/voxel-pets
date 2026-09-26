@@ -114,6 +114,23 @@ function Stages.isStageUnlocked(zone: number, stage: number, stagesData): boolea
 	return (stagesData[Stages.key(zone, stage - 1)] or 0) > 0
 end
 
+-- The stage to play next: the first unlocked stage without a clear (the frontier), or the final
+-- stage once everything is cleared. Returns zone, stage.
+function Stages.nextStage(stagesData): (number, number)
+	stagesData = stagesData or {}
+	for zone = 1, #Stages.Zones do
+		for stage = 1, Stages.STAGES_PER_ZONE do
+			if
+				Stages.isStageUnlocked(zone, stage, stagesData)
+				and (stagesData[Stages.key(zone, stage)] or 0) == 0
+			then
+				return zone, stage
+			end
+		end
+	end
+	return #Stages.Zones, Stages.STAGES_PER_ZONE
+end
+
 function Stages.starsFor(result, hpLeftFraction: number): number
 	if result.winner ~= "A" then
 		return 0

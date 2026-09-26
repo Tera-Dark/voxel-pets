@@ -88,7 +88,9 @@ local DataTemplate = {
 
 	passes = {}, -- pass name -> true (VIP, TripleHatch, LuckyCharm)
 	purchases = {}, -- receipt PurchaseId -> true (ProcessReceipt idempotency)
-	tutorialStep = 0,
+	tutorialStep = 0, -- completed tutorial steps (Config/Tutorial); 99 = skipped
+	tutorialRewarded = false,
+	freeHatches = 1, -- free Meadow Egg hatches (the tutorial's first egg)
 }
 
 -- Fields that are safe to send to the client verbatim.
@@ -115,6 +117,7 @@ DataTemplate.PUBLIC_KEYS = {
 	"settings",
 	"passes",
 	"tutorialStep",
+	"freeHatches",
 }
 
 DataTemplate.MAX_TEAM_SLOTS = Constants.MAX_TEAM_SLOTS

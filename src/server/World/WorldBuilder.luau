@@ -36,10 +36,10 @@ end
 
 local function label(parent, text, offsetY, color)
 	local bb = Instance.new("BillboardGui")
-	bb.Size = UDim2.fromScale(8, 2)
+	bb.Size = UDim2.fromOffset(280, 40) -- pixels: stays readable at any distance
 	bb.StudsOffset = Vector3.new(0, offsetY or 6, 0)
 	bb.AlwaysOnTop = false
-	bb.MaxDistance = 80
+	bb.MaxDistance = 150
 	local tl = Instance.new("TextLabel")
 	tl.Size = UDim2.fromScale(1, 1)
 	tl.BackgroundTransparency = 1
@@ -48,7 +48,8 @@ local function label(parent, text, offsetY, color)
 	tl.TextStrokeTransparency = 0
 	tl.TextStrokeColor3 = Color3.new(0, 0, 0)
 	tl.Font = Enum.Font.Arcade
-	tl.TextScaled = true
+	tl.TextSize = 26
+	tl.TextScaled = false
 	tl.Parent = bb
 	bb.Parent = parent
 	return bb

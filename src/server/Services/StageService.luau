@@ -82,6 +82,7 @@ function StageService.Start_(player, zone: number, stage: number): (boolean, str
 	payload.rewards = rewards
 	Registry.get("DataService")
 		.ReplicateKeys(player, { "coins", "gems", "essence", "stages", "pets", "stats" })
+	Registry.get("TutorialService").Check(player)
 	Registry.get("BattleService").Send(player, payload)
 	return true, nil, { winner = result.winner, rewards = rewards }
 end

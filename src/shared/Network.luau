@@ -46,7 +46,8 @@ local Network = {
 		"BuyWithGems", -- (itemId) -> ok, err
 		"ClaimDaily", -- () -> ok, err, reward
 		"SetSetting", -- (key, value) -> ok
-		"TutorialStep", -- (step) -> ok
+		"ChooseStarter", -- (petId) -> ok, err    (tutorial step 1: swap the untouched starter)
+		"TutorialSkip", -- () -> ok
 	},
 
 	Events = {

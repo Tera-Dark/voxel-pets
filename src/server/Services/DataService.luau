@@ -14,6 +14,11 @@
 --     back to an offline profile, live servers tell the client they are still waiting;
 --   * a player is never loaded twice (PlayerAdded + GetPlayers race under deferred signals);
 --   * players only start loading in Ready(), after every service has subscribed to PlayerLoaded.
+-- Load hooks (DataService.OnLoad) run synchronously, in order, BEFORE the first replication:
+-- data prepared at load (starter pet, daily resets, ...) must be in that first snapshot. Under
+-- Roblox's default deferred SignalBehavior, PlayerLoaded handlers only run after the snapshot has
+-- been sent (a starter granted there once never reached the client: "No active pet"), so a
+-- second full snapshot is deferred until they are done.
 -- Per-player progress is visible to the client as attribute VP_LoadState:
 --   "loading" -> ("waiting") -> "ready" | "failed".
 local Players = game:GetService("Players")
@@ -63,6 +68,8 @@ end
 
 local profiles = {} -- [player] = profile
 local loading = {} -- [player] = true while a session is being opened
+local hydrating = {} -- [player] = true while load hooks run (replication held back)
+local loadHooks = {} -- { { name, fn(player, data) } }
 local store = nil
 local offlineSaves = {} -- [key] = data; survives leave/rejoin within one Studio session
 
@@ -70,6 +77,11 @@ local loaded = Instance.new("BindableEvent")
 DataService.PlayerLoaded = loaded.Event -- (player, data)
 local unloading = Instance.new("BindableEvent")
 DataService.PlayerUnloading = unloading.Event -- (player, data)
+
+-- Registers a synchronous load hook (see header). Hooks must not yield.
+function DataService.OnLoad(name: string, fn)
+	table.insert(loadHooks, { name = name, fn = fn })
+end
 
 local function setAttr(player, name, value)
 	pcall(player.SetAttribute, player, name, value)
@@ -143,7 +155,7 @@ local function chooseMode()
 		return "store", ProfileStore.New(DataService.STORE_NAME, template)
 	end
 	if game.PlaceId == 0 then
-		warn("[DataService] unpublished place: offline test profiles (progress is not saved)")
+		print("[DataService] unpublished place: offline test profiles (progress is not saved)")
 		return "offline", nil
 	end
 	local started = os.clock()
@@ -156,7 +168,7 @@ local function chooseMode()
 	if ProfileStore.DataStoreState == "Access" then
 		return "store", ProfileStore.New(DataService.STUDIO_STORE_NAME, template)
 	end
-	warn(
+	print(
 		"[DataService] no DataStore access ("
 			.. tostring(ProfileStore.DataStoreState)
 			.. "): offline test profiles (progress is not saved)"
@@ -202,6 +214,14 @@ local function onPlayerAdded(player: Player)
 	if profile.Data.stats.firstJoin == 0 then
 		profile.Data.stats.firstJoin = os.time()
 	end
+	hydrating[player] = true
+	for _, hook in loadHooks do
+		local okHook, errHook = pcall(hook.fn, player, profile.Data)
+		if not okHook then
+			warn("[DataService] load hook " .. hook.name .. " failed: " .. tostring(errHook))
+		end
+	end
+	hydrating[player] = nil
 	loaded:Fire(player, profile.Data)
 	local ok, err = pcall(DataService.Replicate, player)
 	if not ok then
@@ -210,6 +230,13 @@ local function onPlayerAdded(player: Player)
 		return
 	end
 	setAttr(player, "VP_LoadState", "ready")
+	-- Deferred PlayerLoaded handlers run after this thread: resend once they are done so nothing
+	-- they changed is lost even if a handler forgets to replicate.
+	task.defer(function()
+		if profiles[player] == profile then
+			pcall(DataService.Replicate, player)
+		end
+	end)
 end
 
 local function onPlayerRemoving(player: Player)
@@ -242,7 +269,7 @@ end
 -- Sends the whole public profile (used on load and after large changes).
 function DataService.Replicate(player: Player)
 	local data = DataService.Get(player)
-	if not data then
+	if not data or hydrating[player] then
 		return
 	end
 	Remotes.fire("ProfileDelta", player, publicSnapshot(data))
@@ -251,7 +278,7 @@ end
 -- Sends only the listed top-level keys.
 function DataService.ReplicateKeys(player: Player, keys: { string })
 	local data = DataService.Get(player)
-	if not data then
+	if not data or hydrating[player] then
 		return
 	end
 	local delta = {}
@@ -287,19 +314,10 @@ function DataService.Start()
 		end
 		return true
 	end)
-	Remotes.handle("TutorialStep", function(player, step)
-		local data = DataService.Get(player)
-		local s = Remotes.int(step, 0, 50)
-		if not data or not s then
-			return false, "Bad step"
-		end
-		data.tutorialStep = math.max(data.tutorialStep, s)
-		return true
-	end)
 end
 
 -- Runs after every service's Start(): now it is safe to load players (all PlayerLoaded
--- listeners are connected).
+-- listeners and load hooks are registered).
 function DataService.Ready()
 	local mode, s = chooseMode()
 	DataService.Mode, store = mode, s

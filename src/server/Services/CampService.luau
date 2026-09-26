@@ -221,6 +221,7 @@ function CampService.OnJoin(player)
 	else
 		d.camp.lastCollect = now
 	end
+	Registry.get("DataService").ReplicateKeys(player, { "camp" })
 end
 
 -- Public snapshot for the client (rates + pending + slots + unlock state).

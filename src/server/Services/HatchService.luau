@@ -16,6 +16,7 @@ local Remotes = require(script.Parent.Parent.Network.Remotes)
 local HatchService = Registry.register("HatchService", {})
 
 HatchService.MAX_MULTI = 3
+HatchService.FREE_EGG = "MeadowEgg" -- profile.freeHatches applies to this egg
 local seeder = Random.new()
 
 local function data(player)
@@ -81,8 +82,12 @@ function HatchService.HatchEgg(player, eggId: string, count: number): (boolean, 
 	if Registry.get("PetService").Count(player) + count > Registry.get("PetService").MAX_PETS then
 		return false, "Pet storage full (dismantle some pets)"
 	end
+	-- First Meadow Egg is free (tutorial): no purchase, so no paid-random-item rules apply.
+	local free = eggId == HatchService.FREE_EGG and count == 1 and (d.freeHatches or 0) > 0
 	local economy = Registry.get("EconomyService")
-	if not economy.Spend(player, egg.price.currency, egg.price.amount * count, false) then
+	if free then
+		d.freeHatches -= 1
+	elseif not economy.Spend(player, egg.price.currency, egg.price.amount * count, false) then
 		return false, "Not enough " .. egg.price.currency
 	end
 
@@ -91,6 +96,16 @@ function HatchService.HatchEgg(player, eggId: string, count: number): (boolean, 
 	for _ = 1, count do
 		local luck = HatchService.CurrentLuck(player)
 		local petId, rarity = Hatch.roll(rng, eggId, luck)
+		if free then
+			-- guarantee a different element than the active pet: a second element for 1v1
+			local activeUid = d.team["1"]
+			local avoid = activeUid and d.pets[activeUid] and Pets[d.pets[activeUid].petId].element
+			local tries = 0
+			while avoid and Pets[petId].element == avoid and tries < 30 do
+				petId, rarity = Hatch.roll(rng, eggId, luck)
+				tries += 1
+			end
+		end
 		if d.luckCharges > 0 then
 			d.luckCharges -= 1
 		end
@@ -111,8 +126,11 @@ function HatchService.HatchEgg(player, eggId: string, count: number): (boolean, 
 		end
 	end
 	Registry.get("QuestService").Add(player, "hatches", count)
-	Registry.get("DataService")
-		.ReplicateKeys(player, { egg.price.currency, "pets", "nextUid", "codex", "stats", "luckCharges" })
+	Registry.get("DataService").ReplicateKeys(
+		player,
+		{ egg.price.currency, "pets", "nextUid", "codex", "stats", "luckCharges", "freeHatches" }
+	)
+	Registry.get("TutorialService").Check(player)
 	return true, nil, results
 end
 

@@ -17,7 +17,7 @@ local Remotes = require(script.Parent.Parent.Network.Remotes)
 local PetService = Registry.register("PetService", {})
 
 PetService.MAX_PETS = 200
-PetService.STARTERS = { "Emberfox", "Tidefrog", "Mossback" }
+PetService.STARTERS = require(Shared.Config.Tutorial).STARTERS -- shared with the tutorial UI
 
 local function data(player)
 	return Registry.get("DataService").Get(player)
@@ -183,6 +183,7 @@ function PetService.LevelUp(player, uid: string, times: number): (boolean, strin
 	end
 	Registry.get("QuestService").Add(player, "levelUps", done)
 	replicate(player, { "pets", "coins" })
+	Registry.get("TutorialService").Check(player)
 	return true, nil
 end
 
@@ -321,9 +322,10 @@ end
 -- ---------------------------------------------------------------- lifecycle
 function PetService.Start()
 	local DataService = Registry.get("DataService")
-	DataService.PlayerLoaded:Connect(function(player, d)
+	-- Load hook (not a PlayerLoaded handler): the starter must be in the first snapshot.
+	DataService.OnLoad("PetService.starter", function(player, d)
 		if next(d.pets) == nil then
-			-- New account: give a random starter and put it in slot 1.
+			-- New account: a random starter in slot 1 (the tutorial lets the player swap it).
 			local starter = PetService.STARTERS[math.random(1, #PetService.STARTERS)]
 			local inst = PetService.Grant(player, starter, "Normal", false)
 			d.team["1"] = inst.uid

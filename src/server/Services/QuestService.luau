@@ -71,7 +71,7 @@ function QuestService.Claim(player, questId: string): (boolean, string?, any?)
 end
 
 function QuestService.Start()
-	Registry.get("DataService").PlayerLoaded:Connect(function(player)
+	Registry.get("DataService").OnLoad("QuestService.dailyReset", function(player)
 		QuestService.EnsureFresh(player)
 	end)
 	Remotes.handle("ClaimQuest", function(player, questId)

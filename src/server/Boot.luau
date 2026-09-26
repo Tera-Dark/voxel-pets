@@ -24,6 +24,7 @@ Boot.SERVICES = {
 	"DataService",
 	"EconomyService",
 	"PetService",
+	"TutorialService",
 	"MonetizationService",
 	"AnnouncementService",
 	"QuestService",

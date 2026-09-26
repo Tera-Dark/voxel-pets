@@ -104,6 +104,7 @@ local function refreshPasses(player)
 	if not d then
 		return
 	end
+	local changed = false
 	for name, pass in MonetizationService.Passes do
 		if pass.id > 0 then
 			local ok, owns = pcall(
@@ -112,10 +113,14 @@ local function refreshPasses(player)
 				player.UserId,
 				pass.id
 			)
-			if ok and owns then
+			if ok and owns and not d.passes[name] then
 				d.passes[name] = true
+				changed = true
 			end
 		end
+	end
+	if changed then
+		Registry.get("DataService").ReplicateKeys(player, { "passes" })
 	end
 end
 
