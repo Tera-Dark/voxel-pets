@@ -6,7 +6,7 @@
 
 | 项目 | 状态 |
 |---|---|
-| 当前阶段 | **MVP 代码完成，Studio 实机验证中**（v0.2.0：新 HUD + 新手教程；单元 13,149 · 服务端冒烟 169 · 启动鲁棒性 43 · 客户端端到端 165 全部通过） |
+| 当前阶段 | **MVP 代码完成，Studio 实机验证中**（v0.3.0：像素暖木 UI + 竖屏适配；单元 13,149 · 服务端冒烟 169 · 启动鲁棒性 43 · 客户端端到端 165 全部通过） |
 | 下一里程碑 | Studio 实机跑通验证清单 → 内部试玩（10 人）→ 表现层补齐 |
 | CI | ![CI](https://github.com/Tera-Dark/voxel-pets/actions/workflows/ci.yml/badge.svg) |
 | 引擎 / 语言 | Roblox Studio · Luau · Rojo |
@@ -51,6 +51,7 @@ lune run tools/server_smoke             # 169 项服务端冒烟（Roblox API Mo
 lune run tools/boot_smoke               # 43 项启动鲁棒性（虚拟时间调度：挂起 / 崩溃 / 回退场景）
 lune run tools/client_smoke             # 165 项客户端端到端（真实客户端 × 真实服务端：教程、菜单、全部界面）
 lune run tools/ui_snapshot && python3 scripts/render_ui.py   # 界面预览 PNG（/tmp/ui_snapshots，见 docs/ui-preview）
+python3 scripts/make_overview.py /tmp/ui_snapshots overview.png 0.3.0   # 拼总览大图（中文说明）
 python3 scripts/check_roblox_api.py     # 属性 / 枚举 / 服务名对照 Roblox API Dump 校验
 lune run tools/sim_replay -- Emberfox ThornbackBoar 42 InsightLens   # 单场逐事件日志
 lune run tools/sim_batch -- --quick     # 平衡快照（胜率 / 时长矩阵；去掉 --quick 跑 N=1000）
@@ -82,7 +83,8 @@ rojo serve default.project.json         # 或：在 Roblox Studio 中用 Rojo �
 3. 按下面的"应该看到"逐条体验；**任何不对劲就截图发给开发者**（截整个画面即可）。
 
 **应该看到（新玩家流程，约 2-3 分钟）：**
-- 加载界面和右上角有版本号（如 `v0.2.0 (abc1234 2026-09-26)`），应与开发者告知的一致。
+- 加载界面和右上角有版本号（如 `v0.3.0 (abc1234 2026-09-26)`），应与开发者告知的一致。
+- 手机 / 窄窗口检查：竖屏时目标栏通宽、功能坞两行、伙伴条与 BATTLE 同排在坞上方；每个界面右上角有 X 可关。
 - 进入后弹出 **Choose your partner!**：三只伙伴卡片（3D 预览 + 属性条），点 CHOOSE 选一只。
 - 左上是金币 / 钻石和**目标栏**（写着现在该做什么，点它会直接带你过去）；黄色箭头指着右下角 **BATTLE** → 点它 → 再点 **FIGHT**，战斗全自动。
 - 赢了之后底部菜单多出 **Hatch**（带 NEW 和红点）→ 打开 → **Hatch x1 (FREE)** 免费孵第一颗蛋（必出不同属性的宠物）。

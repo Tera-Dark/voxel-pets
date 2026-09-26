@@ -4,6 +4,6 @@
 -- identical otherwise). VERSION is bumped by hand per delivery; BUILD is stamped by
 -- scripts/build.sh with the git short hash + UTC date. "dev" = unstamped build (e.g. rojo serve).
 return {
-	VERSION = "0.2.0",
+	VERSION = "0.3.0",
 	BUILD = "dev",
 }
