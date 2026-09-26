@@ -5,6 +5,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Players = game:GetService("Players")
 
 local Network = require(ReplicatedStorage.Shared.Network)
+local Validate = require(ReplicatedStorage.Shared.Validate)
 
 local Remotes = {}
 local folder = Instance.new("Folder")
@@ -82,35 +83,10 @@ function Remotes.fireAll(name: string, ...)
 end
 
 -- ---------------------------------------------------------------- validators
-function Remotes.int(v, lo: number?, hi: number?): number?
-	if type(v) ~= "number" or v ~= v or v % 1 ~= 0 then
-		return nil
-	end
-	if (lo and v < lo) or (hi and v > hi) then
-		return nil
-	end
-	return v
-end
-
-function Remotes.str(v, maxLen: number?): string?
-	if type(v) ~= "string" or #v == 0 or (maxLen and #v > maxLen) then
-		return nil
-	end
-	return v
-end
-
-function Remotes.strList(v, maxLen: number): { string }?
-	if type(v) ~= "table" or #v == 0 or #v > maxLen then
-		return nil
-	end
-	local out = {}
-	for i, s in ipairs(v) do
-		if type(s) ~= "string" then
-			return nil
-		end
-		out[i] = s
-	end
-	return out
-end
+-- Pure logic lives in shared/Validate (unit-tested under Lune); kept as aliases so services
+-- keep calling Remotes.int / Remotes.str / Remotes.strList.
+Remotes.int = Validate.int
+Remotes.str = Validate.str
+Remotes.strList = Validate.strList
 
 return Remotes

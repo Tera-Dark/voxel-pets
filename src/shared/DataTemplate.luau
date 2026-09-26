@@ -33,6 +33,8 @@ local DataTemplate = {
 	},
 
 	-- Expedition
+	-- (ExpeditionService also writes expedition.lastSummary = {status, floorsCleared, battlesWon,
+	--  marks, coins, exclusiveDrop?} after each run; omitted here because nil means "no run yet".)
 	expedition = {
 		run = nil, -- current run state or nil
 		talents = {}, -- talents[id] = true
