@@ -275,6 +275,19 @@ function ClientMock.new(M, root, opts)
 
 	-- ------------------------------------------------------------ module trees
 	local SOURCES = {}
+	-- Module tree nodes mirror Folder/ModuleScript instances: child indexing plus the lookup
+	-- methods scripts use on them (FindFirstChild / WaitForChild).
+	local nodeMethods = {}
+	function nodeMethods.FindFirstChild(t, childName)
+		return rawget(t, "__children")[childName]
+	end
+	function nodeMethods.WaitForChild(t, childName, timeout)
+		local child = rawget(t, "__children")[childName]
+		if not child and not timeout then
+			error('Infinite yield on WaitForChild("' .. tostring(childName) .. '")', 2)
+		end
+		return child
+	end
 	local function node(name, path, parent)
 		local n = { Name = name, __path = path, Parent = parent, __children = {} }
 		return setmetatable(n, {
@@ -282,6 +295,9 @@ function ClientMock.new(M, root, opts)
 				local child = rawget(t, "__children")[k]
 				if child then
 					return child
+				end
+				if nodeMethods[k] then
+					return nodeMethods[k]
 				end
 				error(tostring(k) .. " is not a valid member of " .. name, 2)
 			end,

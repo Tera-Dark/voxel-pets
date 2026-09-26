@@ -38,8 +38,8 @@ jobs:
       - name: Client end-to-end (real client scripts vs real server, every screen + flows)
         run: lune run tools/client_smoke
 
-      - name: Rojo build (validates project tree)
-        run: rojo build default.project.json -o /tmp/VoxelPets.rbxl
+      - name: Rojo build with build stamp (validates project tree)
+        run: ./scripts/build.sh /tmp/VoxelPets.rbxl
 
       - name: Balance snapshot (quick)
         run: lune run tools/sim_batch -- --quick

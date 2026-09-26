@@ -58,12 +58,16 @@ end
 -- ---------------------------------------------------------------- boot
 print("boot")
 CM.start()
+M.advance(0.05)
+check(CM.byText("v0.") ~= nil, "loading screen shows the build version")
 M.advance(4)
 check(CM.playerGui:FindFirstChild("VoxelPetsUI") ~= nil, "main UI built")
 M.advance(1)
 check(CM.playerGui:FindFirstChild("VoxelPetsBoot") == nil, "loading screen removed")
 check(CM.byText("TEST MODE") ~= nil, "offline banner shown in an unpublished place")
 check(table.find(CM.prints, "[VoxelPets] client ready") ~= nil, "client reached ready")
+local buildLabel = CM.playerGui.VoxelPetsUI:FindFirstChild("BuildLabel")
+check(buildLabel ~= nil and string.sub(buildLabel.Text, 1, 2) == "v0", "build stamp in the corner")
 noNewErrors("boot")
 
 local Screens = CM.require("src/client/UI/ScreenManager.luau")

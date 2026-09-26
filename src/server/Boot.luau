@@ -157,6 +157,14 @@ function Boot.run(opts)
 	state = "booting"
 	publish("start")
 
+	local okInfo, info = pcall(function()
+		return require(ReplicatedStorage.Shared.BuildInfo)
+	end)
+	local build = if okInfo and type(info) == "table"
+		then string.format("v%s (%s)", tostring(info.VERSION), tostring(info.BUILD))
+		else "v?"
+	ReplicatedStorage:SetAttribute("VP_ServerBuild", build)
+
 	local Registry = require(Server.Registry)
 	local Remotes = nil
 	if Boot.step("Remotes", function()
@@ -191,10 +199,11 @@ function Boot.run(opts)
 	publish("done")
 	print(
 		string.format(
-			"[VoxelPets] server %s (%d problem%s)",
+			"[VoxelPets] server %s (%d problem%s) %s",
 			state,
 			#errors,
-			#errors == 1 and "" or "s"
+			#errors == 1 and "" or "s",
+			build
 		)
 	)
 	return state, Boot.errors()

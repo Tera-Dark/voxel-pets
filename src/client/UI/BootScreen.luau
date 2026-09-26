@@ -17,7 +17,8 @@ local STEPS = {
 local MARK = { wait = "[  ]", ok = "[OK]", warn = "[!!]", fail = "[XX]" }
 local HINT_AFTER = 20 -- s before the "take a screenshot" hint appears
 
-function BootScreen.new(playerGui)
+-- buildText: e.g. "v0.1.1 (f6220d8 2026-09-26)" - shown so screenshots identify the build.
+function BootScreen.new(playerGui, buildText: string?)
 	local self = setmetatable({ started = os.clock(), rows = {} }, BootScreen)
 	local gui = Instance.new("ScreenGui")
 	gui.Name = "VoxelPetsBoot"
@@ -83,9 +84,19 @@ function BootScreen.new(playerGui)
 		TextTruncate = Enum.TextTruncate.AtEnd,
 		Parent = box,
 	})
+	C.label({
+		Name = "BuildLabel",
+		Size = UDim2.fromOffset(300, 16),
+		Position = UDim2.new(1, -312, 1, -18),
+		Text = buildText or "",
+		TextSize = 8,
+		TextColor3 = Theme.Colors.textDim,
+		TextXAlignment = Enum.TextXAlignment.Right,
+		Parent = box,
+	})
 	self.hint = C.label({
 		Size = UDim2.new(1, -28, 0, 28),
-		Position = UDim2.new(0, 14, 1, -36),
+		Position = UDim2.new(0, 14, 1, -44),
 		Text = "Stuck here? Take a screenshot of this screen and send it to the developer.",
 		TextSize = 9,
 		TextColor3 = Theme.Colors.accent,

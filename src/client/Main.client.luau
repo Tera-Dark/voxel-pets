@@ -19,9 +19,22 @@ local C = require(Client.UI.Components)
 local DevConsole = require(Client.UI.DevConsole)
 local BootScreen = require(Client.UI.BootScreen)
 
+-- "v0.1.1 (f6220d8 2026-09-26)": visible on the loading screen and in the corner so every
+-- screenshot shows which build is running.
+local function buildText(): string
+	local ok, info = pcall(function()
+		return require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("BuildInfo"))
+	end)
+	if ok and type(info) == "table" then
+		return string.format("v%s (%s)", tostring(info.VERSION), tostring(info.BUILD))
+	end
+	return "v?"
+end
+local BUILD_TEXT = buildText()
+
 DevConsole.start()
 DevConsole.mount(playerGui)
-local boot = BootScreen.new(playerGui)
+local boot = BootScreen.new(playerGui, BUILD_TEXT)
 
 local function traceback(err)
 	return tostring(err) .. "\n" .. debug.traceback(nil, 2)
@@ -43,6 +56,9 @@ local function diagnostics(): string
 			.. "   stage: "
 			.. tostring(ReplicatedStorage:GetAttribute("VP_BootStage") or "-"),
 		"save: " .. tostring(player:GetAttribute("VP_LoadState") or "no status yet"),
+		"build: client " .. BUILD_TEXT .. " / server " .. tostring(
+			ReplicatedStorage:GetAttribute("VP_ServerBuild") or "?"
+		),
 	}
 	local errs = ReplicatedStorage:GetAttribute("VP_BootErrors")
 	if type(errs) == "string" and errs ~= "" then
@@ -459,6 +475,22 @@ step("save mode banner", function()
 		TextSize = 9,
 		TextXAlignment = Enum.TextXAlignment.Center,
 		ZIndex = 80,
+		Parent = gui,
+	})
+end)
+
+-- Build stamp in the bottom-right corner (tiny; lets any screenshot identify the build).
+step("build label", function()
+	C.label({
+		Name = "BuildLabel",
+		Size = UDim2.fromOffset(260, 14),
+		Position = UDim2.new(1, -266, 1, -16),
+		Text = BUILD_TEXT,
+		TextSize = 7,
+		TextTransparency = 0.35,
+		TextColor3 = Theme.Colors.textDim,
+		TextXAlignment = Enum.TextXAlignment.Right,
+		ZIndex = 5,
 		Parent = gui,
 	})
 end)
