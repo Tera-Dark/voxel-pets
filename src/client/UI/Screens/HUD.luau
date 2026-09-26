@@ -1,26 +1,121 @@
 --!nonstrict
--- Always-visible HUD: currencies (top), menu buttons (left), announcement ticker, settings.
+-- HUD assembler. Layout (1280x720 reference, UIScale adapts other screens):
+--   top-left     coins + gems (+ expands the rest)           top-right  settings gear
+--   below        goal tracker ("what next?")
+--   left         dock: unlocked features only, grouped, collapsible
+--   bottom       active pet chip (left) + BATTLE call-to-action (right)
+-- Also: announcement ticker, server toasts, notification badges, live feature-unlock banners.
+-- Handles are exposed on ctx.hud for the tutorial pointer.
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Shared = ReplicatedStorage.Shared
-local Formulas = require(Shared.Config.Formulas)
-local Pets = require(Shared.Config.Pets)
+local Quests = require(Shared.Config.Quests)
+local Tutorial = require(Shared.Config.Tutorial)
+local PetInstance = require(Shared.Progression.PetInstance)
+
+local UI = script.Parent.Parent
+local TopBar = require(UI.Hud.TopBar)
+local GoalTracker = require(UI.Hud.GoalTracker)
+local Dock = require(UI.Hud.Dock)
+local ActionBar = require(UI.Hud.ActionBar)
+local PixelIcons = require(UI.PixelIcons)
 
 local HUD = {}
 
-local CURRENCIES = { "coins", "gems", "essence", "shards", "marks", "tickets", "medals" }
-local MENU = {
-	{ "Pets", "Pets" },
-	{ "Battle", "Stages" },
-	{ "Hatch", "Hatch" },
-	{ "Camp", "Camp" },
-	{ "Expedition", "Expedition" },
-	{ "Arena", "Arena" },
-	{ "Codex", "Codex" },
-	{ "Quests", "Quests" },
-	{ "Shop", "Shop" },
-	{ "Prestige", "Prestige" },
-}
+local BADGE_KEYS = { "freeHatches", "quests", "stats", "coins", "pets", "team", "camp" }
+
+-- Pure badge rules (exported for tests).
+function HUD.questsClaimable(p): boolean
+	local today = Quests.dateKey()
+	if p.stats and p.stats.lastDailyClaim ~= today then
+		return true
+	end
+	local q = p.quests
+	if not q or q.date ~= today then
+		return false
+	end
+	for _, quest in Quests.Daily do
+		if
+			((q.progress or {})[quest.key] or 0) >= quest.goal and not (q.claimed or {})[quest.id]
+		then
+			return true
+		end
+	end
+	return false
+end
+
+function HUD.canLevelUp(p, inst): boolean
+	return inst ~= nil
+		and PetInstance.canLevelUp(inst)
+		and (p.coins or 0) >= PetInstance.levelUpCost(inst)
+end
+
+-- Non-blocking "NEW feature" banners for live unlocks (the tutorial guides brand-new players).
+-- Deferred a moment: the stage clear and the tutorial completion arrive as separate updates, and
+-- the completion popup already announces what finishing the tutorial unlocks.
+function HUD.unlockBanners(ctx, root, features)
+	task.delay(0.6, function()
+		local p = ctx.State.profile
+		if not p or Tutorial.isActive(p) then
+			return
+		end
+		if ctx.tutorialJustFinished and os.clock() - ctx.tutorialJustFinished < 5 then
+			return
+		end
+		HUD.showBanners(ctx, root, features)
+	end)
+end
+
+function HUD.showBanners(ctx, root, features)
+	local C, Theme = ctx.C, ctx.Theme
+	for i, f in features do
+		local banner = C.panel({
+			Name = "UnlockBanner",
+			Size = UDim2.fromOffset(460, 72),
+			Position = UDim2.new(0.5, 0, 0, 50 + (i - 1) * 80),
+			AnchorPoint = Vector2.new(0.5, 0),
+			ZIndex = 60,
+			Parent = root,
+		})
+		local icon =
+			PixelIcons.new(f.icon, 40, { Position = UDim2.fromOffset(14, 16), Parent = banner })
+		PixelIcons.setZIndex(icon, 61)
+		C.label({
+			Size = UDim2.new(1, -180, 0, 22),
+			Position = UDim2.fromOffset(66, 8),
+			Text = "NEW: " .. f.label .. " unlocked!",
+			TextSize = 11,
+			TextColor3 = Theme.Colors.accent,
+			ZIndex = 61,
+			Parent = banner,
+		})
+		C.label({
+			Size = UDim2.new(1, -180, 0, 34),
+			Position = UDim2.fromOffset(66, 32),
+			Text = f.blurb,
+			TextSize = 8,
+			TextColor3 = Theme.Colors.textDim,
+			ZIndex = 61,
+			Parent = banner,
+		})
+		C.button({
+			Size = UDim2.fromOffset(92, 36),
+			Position = UDim2.new(1, -104, 0.5, -18),
+			Text = "OPEN",
+			BackgroundColor3 = Theme.Colors.good,
+			ZIndex = 61,
+			Parent = banner,
+		}, function()
+			banner:Destroy()
+			ctx.openFeature(f.id)
+		end)
+		task.delay(8, function()
+			if banner.Parent then
+				banner:Destroy()
+			end
+		end)
+	end
+end
 
 function HUD.build(host, ctx)
 	local C, Theme, State = ctx.C, ctx.Theme, ctx.State
@@ -31,86 +126,53 @@ function HUD.build(host, ctx)
 		Parent = host,
 	})
 
-	-- top bar
-	local top = C.frame({
-		Size = UDim2.new(1, 0, 0, 40),
-		BackgroundColor3 = Theme.Colors.bg,
-		BackgroundTransparency = 0.2,
-		Parent = root,
+	local top = TopBar.build(root, ctx)
+	local goal = GoalTracker.build(root, ctx, {
+		onAction = function(g)
+			if g.action == "starter" then
+				if ctx.tutorial then
+					ctx.tutorial.openStarterPicker()
+				end
+			elseif type(g.action) == "table" then
+				if g.action.screen == "Stages" then
+					ctx.Screens.open("Stages", g.action.arg)
+				else
+					ctx.openFeature(g.action.screen, g.action.arg)
+				end
+			end
+		end,
+		onSkip = function()
+			C.confirm(
+				ctx.gui,
+				"Skip tutorial?",
+				"Everything stays in the menu. The tutorial reward is only given for finishing it.",
+				function()
+					local ok, err = ctx.Net.invoke("TutorialSkip")
+					if not ok then
+						ctx.toast(err, "bad")
+					end
+				end
+			)
+		end,
 	})
-	local row = C.frame({
-		Size = UDim2.new(1, -140, 1, 0),
-		Position = UDim2.fromOffset(8, 0),
-		BackgroundTransparency = 1,
-		Parent = top,
+	local dock = Dock.build(root, ctx, {
+		onOpen = function(id)
+			ctx.openFeature(id)
+		end,
+		onUnlocked = function(features)
+			HUD.unlockBanners(ctx, root, features)
+		end,
+		canvasWidth = function()
+			return if ctx.canvasSize then ctx.canvasSize().X else 1280
+		end,
 	})
-	C.list(row, 6, Enum.FillDirection.Horizontal)
-	row.UIListLayout.VerticalAlignment = Enum.VerticalAlignment.Center
-	local labels = {}
-	for i, currency in CURRENCIES do
-		local _, l = C.currency(row, currency, "0", i)
-		labels[currency] = l
-	end
-	local function refreshCurrencies()
-		local p = State.profile
-		if not p then
-			return
-		end
-		for _, currency in CURRENCIES do
-			labels[currency].Text = Formulas.formatNumber(p[currency] or 0)
-		end
-	end
-	State.onKeys(CURRENCIES, refreshCurrencies)
+	local bar = ActionBar.build(root, ctx)
 
-	-- settings + player name (top right)
-	local settingsBtn = C.button({
-		Size = UDim2.fromOffset(110, 28),
-		Position = UDim2.new(1, -118, 0, 6),
-		Text = "Settings",
-		BackgroundColor3 = Theme.Colors.panelLight,
-		Parent = top,
-	}, function()
-		HUD.openSettings(ctx)
-	end)
-	local _ = settingsBtn
-
-	-- left menu
-	local menu = C.frame({
-		Size = UDim2.fromOffset(120, 400),
-		Position = UDim2.fromOffset(8, 52),
-		BackgroundTransparency = 1,
-		Parent = root,
-	})
-	C.list(menu, 4)
-	for i, entry in MENU do
-		C.button({
-			Size = UDim2.new(1, 0, 0, 30),
-			Text = entry[1],
-			LayoutOrder = i,
-			BackgroundColor3 = Theme.Colors.panelLight,
-			TextSize = 11,
-			Parent = menu,
-		}, function()
-			ctx.Screens.toggle(entry[2])
-		end)
-	end
-
-	-- big "Battle" call to action bottom right
-	C.button({
-		Size = UDim2.fromOffset(160, 44),
-		Position = UDim2.new(1, -172, 1, -56),
-		Text = "BATTLE  >",
-		BackgroundColor3 = Theme.Colors.bad,
-		TextSize = 14,
-		Parent = root,
-	}, function()
-		ctx.Screens.open("Stages")
-	end)
-
-	-- announcement ticker
+	-- announcement ticker (top centre, under the test-mode tag)
 	local ticker = C.label({
-		Size = UDim2.fromOffset(600, 24),
-		Position = UDim2.new(0.5, 0, 0, 46),
+		Name = "Ticker",
+		Size = UDim2.fromOffset(600, 22),
+		Position = UDim2.new(0.5, 0, 0, 26),
 		AnchorPoint = Vector2.new(0.5, 0),
 		TextXAlignment = Enum.TextXAlignment.Center,
 		TextColor3 = Theme.Colors.accent,
@@ -118,8 +180,7 @@ function HUD.build(host, ctx)
 		Text = "",
 		Parent = root,
 	})
-	local queue = {}
-	local showing = false
+	local queue, showing = {}, false
 	local function pump()
 		if showing or #queue == 0 then
 			return
@@ -136,7 +197,7 @@ function HUD.build(host, ctx)
 	end
 	ctx.Net.on("Announcement", function(text, kind)
 		if #queue < 5 then
-			table.insert(queue, { text = text, kind = kind })
+			table.insert(queue, { text = tostring(text), kind = kind })
 		end
 		pump()
 	end)
@@ -144,112 +205,36 @@ function HUD.build(host, ctx)
 		ctx.toast(text, kind)
 	end)
 
-	-- active pet chip (bottom left)
-	local chip = C.panel({
-		Size = UDim2.fromOffset(240, 54),
-		Position = UDim2.new(0, 8, 1, -62),
-		Parent = root,
-	})
-	local chipName = C.label({
-		Size = UDim2.new(1, -12, 0, 20),
-		Position = UDim2.fromOffset(8, 6),
-		Text = "",
-		TextSize = 11,
-		Parent = chip,
-	})
-	local chipInfo = C.label({
-		Size = UDim2.new(1, -12, 0, 20),
-		Position = UDim2.fromOffset(8, 28),
-		Text = "",
-		TextSize = 10,
-		TextColor3 = Theme.Colors.textDim,
-		Parent = chip,
-	})
-	local function refreshChip()
-		local inst = State.teamPet()
-		if inst then
-			chipName.Text = State.petName(inst) .. "  Lv" .. inst.level
-			chipInfo.Text = string.format(
-				"%s %s  Power %s",
-				Pets[inst.petId].element,
-				Pets[inst.petId].rarity,
-				Formulas.formatNumber(
-					Formulas.power(Formulas.finalStats(Pets[inst.petId], inst, State.globalMult()))
-				)
-			)
-		else
-			chipName.Text = "No active pet"
-			chipInfo.Text = ""
+	-- notification badges ("!" on dock items)
+	local function refreshBadges()
+		local p = State.profile
+		if not p then
+			return
 		end
+		dock.setBadge("Hatch", (p.freeHatches or 0) > 0)
+		dock.setBadge("Quests", HUD.questsClaimable(p))
+		dock.setBadge("Pets", HUD.canLevelUp(p, State.teamPet()))
+		local pending = p.camp and p.camp.pending
+		dock.setBadge("Camp", pending ~= nil and (pending.coins or 0) >= 50)
 	end
-	State.onKeys({ "team", "pets", "codex", "prestige" }, refreshChip)
-	chip.InputBegan:Connect(function(input)
-		if
-			input.UserInputType == Enum.UserInputType.MouseButton1
-			or input.UserInputType == Enum.UserInputType.Touch
-		then
-			ctx.Screens.open("Pets")
-		end
+	State.onKeys(BADGE_KEYS, refreshBadges)
+	refreshBadges()
+
+	ctx.Screens.Opened:Connect(function(name)
+		dock.onScreen(name)
+		refreshBadges()
 	end)
 
-	refreshCurrencies()
-	refreshChip()
+	ctx.hud = {
+		root = root,
+		top = top,
+		goal = goal,
+		dock = dock,
+		battleButton = bar.battle,
+		petChip = bar.chip,
+		refreshBadges = refreshBadges,
+	}
 	return root
-end
-
-function HUD.openSettings(ctx)
-	local C, Theme, State = ctx.C, ctx.Theme, ctx.State
-	local content = C.modal(ctx.gui, "Settings", UDim2.fromOffset(360, 220))
-	C.list(content, 8)
-	local settings = State.profile.settings
-	C.label({ Size = UDim2.new(1, 0, 0, 20), Text = "Battle speed", ZIndex = 53, Parent = content })
-	local speeds = C.frame({
-		Size = UDim2.new(1, 0, 0, 32),
-		BackgroundTransparency = 1,
-		ZIndex = 53,
-		Parent = content,
-	})
-	C.list(speeds, 6, Enum.FillDirection.Horizontal)
-	local speedButtons = {}
-	local function paint()
-		for s, b in speedButtons do
-			b:SetAttribute(
-				"BaseColor",
-				s == settings.battleSpeed and Theme.Colors.good or Theme.Colors.panelLight
-			)
-		end
-	end
-	for _, s in { 1, 2, 3 } do
-		speedButtons[s] = C.button(
-			{ Size = UDim2.fromOffset(70, 32), Text = s .. "x", ZIndex = 54, Parent = speeds },
-			function()
-				settings.battleSpeed = s
-				ctx.Net.invoke("SetSetting", "battleSpeed", s)
-				paint()
-			end
-		)
-	end
-	paint()
-	local skipBtn
-	skipBtn = C.button({
-		Size = UDim2.new(1, 0, 0, 32),
-		Text = "Auto-skip battles: " .. (settings.autoSkip and "ON" or "OFF"),
-		ZIndex = 54,
-		BackgroundColor3 = Theme.Colors.panelLight,
-		Parent = content,
-	}, function()
-		settings.autoSkip = not settings.autoSkip
-		ctx.Net.invoke("SetSetting", "autoSkip", settings.autoSkip)
-		skipBtn.Text = "Auto-skip battles: " .. (settings.autoSkip and "ON" or "OFF")
-	end)
-	C.label({
-		Size = UDim2.new(1, 0, 0, 40),
-		Text = "Combat is fully automatic. Your choices are made before the fight: team, relics, talents.",
-		TextSize = 10,
-		TextColor3 = Theme.Colors.textDim,
-		ZIndex = 53,
-		Parent = content,
-	})
 end
 
 return HUD

@@ -69,9 +69,40 @@ function ScreenManager.init(hostFrame, context)
 			return
 		end
 		if input.KeyCode == Enum.KeyCode.Escape or input.KeyCode == Enum.KeyCode.ButtonB then
+			if ctx and ctx.C and ctx.C.closeTopModal and ctx.C.closeTopModal() then
+				return -- a window was open: close only that
+			end
 			ScreenManager.close()
 		end
 	end)
+end
+
+-- Scales a screen panel down (never up) so it fits the logical canvas with a margin.
+local function fit(frame)
+	if not (ctx and ctx.canvasSize) or not frame:IsA("GuiObject") then
+		return
+	end
+	local w, h = frame.Size.X.Offset, frame.Size.Y.Offset
+	if frame.Size.X.Scale > 0 or frame.Size.Y.Scale > 0 or w <= 0 or h <= 0 then
+		return -- full-screen / scale-sized screens already fit
+	end
+	local canvas = ctx.canvasSize()
+	local s = math.min(1, (canvas.X - 24) / w, (canvas.Y - 24) / h)
+	local scaler = frame:FindFirstChild("FitScale")
+	if not scaler then
+		scaler = Instance.new("UIScale")
+		scaler.Name = "FitScale"
+		scaler.Parent = frame
+	end
+	scaler.Scale = math.max(0.5, s)
+end
+
+function ScreenManager.refit()
+	for _, entry in screens do
+		if entry.frame then
+			pcall(fit, entry.frame)
+		end
+	end
 end
 
 function ScreenManager.register(name: string, module)
@@ -98,6 +129,7 @@ function ScreenManager.open(name: string, arg)
 		end
 		entry.frame.Visible = false
 	end
+	pcall(fit, entry.frame)
 	entry.frame.Visible = true
 	current = name
 	if entry.module.onOpen and not entry.failed then

@@ -18,6 +18,7 @@ local Theme = require(Client.UI.PixelTheme)
 local C = require(Client.UI.Components)
 local DevConsole = require(Client.UI.DevConsole)
 local BootScreen = require(Client.UI.BootScreen)
+local Workspace = game:GetService("Workspace")
 
 -- "v0.1.1 (f6220d8 2026-09-26)": visible on the loading screen and in the corner so every
 -- screenshot shows which build is running.
@@ -81,6 +82,9 @@ local coreOk, coreErr = xpcall(function()
 	core.Screens = require(Client.UI.ScreenManager)
 	core.BattleStage = require(Client.World.BattleStage)
 	core.Companion = require(Client.World.Companion)
+	core.Features = require(Shared.Config.Features)
+	core.Tutorial = require(Client.UI.Tutorial)
+	core.BattleFlow = require(Client.BattleFlow)
 end, traceback)
 if not coreOk then
 	boot:set("connect", "fail", "game scripts failed to load")
@@ -90,6 +94,7 @@ if not coreOk then
 end
 local StagesConfig, Net, State, Screens = core.StagesConfig, core.Net, core.State, core.Screens
 local BattleStage, Companion = core.BattleStage, core.Companion
+local Features, Tutorial, BattleFlow = core.Features, core.Tutorial, core.BattleFlow
 
 local SCREEN_NAMES = {
 	"HUD",
@@ -194,6 +199,29 @@ pcall(function()
 	StarterGui:SetCoreGuiEnabled(Enum.CoreGuiType.Backpack, false)
 end)
 
+-- Designed at 1280x720; UIScale keeps the layout proportional on phones and large monitors.
+local ctx = {} -- shared UI context (declared before rescale(), which reads ctx.hud)
+local uiScale = Instance.new("UIScale")
+uiScale.Parent = gui
+local function rescale()
+	local camera = Workspace.CurrentCamera
+	local viewport = camera and camera.ViewportSize or Vector2.new(1280, 720)
+	if viewport.X <= 0 or viewport.Y <= 0 then
+		return
+	end
+	-- 0.75 floor keeps the pixel text readable on phones; screens fit themselves (ScreenManager)
+	uiScale.Scale = math.clamp(math.min(viewport.X / 1280, viewport.Y / 720), 0.75, 1.3)
+	if ctx and ctx.hud then
+		ctx.hud.dock.relayout()
+	end
+	if Screens and Screens.refit then
+		Screens.refit()
+	end
+end
+step("ui scale", function()
+	Workspace.CurrentCamera:GetPropertyChangedSignal("ViewportSize"):Connect(rescale)
+end)
+
 local host = C.frame({
 	Name = "Screens",
 	Size = UDim2.fromScale(1, 1),
@@ -201,7 +229,13 @@ local host = C.frame({
 	Parent = gui,
 })
 
-local ctx = {}
+rescale()
+-- Logical (pre-UIScale) size of the HUD canvas, for layout decisions (dock row, screen fit).
+function ctx.canvasSize(): Vector2
+	local size = host.AbsoluteSize
+	local s = uiScale.Scale
+	return Vector2.new(size.X / s, size.Y / s)
+end
 ctx.Net = Net
 ctx.State = State
 ctx.Screens = Screens
@@ -210,6 +244,17 @@ ctx.Theme = Theme
 ctx.gui = gui
 function ctx.toast(text, kind)
 	C.toast(gui, tostring(text), kind)
+end
+
+-- Opens a HUD feature (feature ids = screen names) or explains how to unlock it.
+function ctx.openFeature(id: string, arg)
+	local feature = Features.ById[id]
+	if feature and not Features.isUnlocked(State.profile, id) then
+		ctx.toast(Features.requirement(id) .. " to unlock " .. feature.label, "info")
+		return false
+	end
+	Screens.toggle(id, arg)
+	return true
 end
 
 -- Generic pet picker modal used by Camp / Expedition. filter(uid) -> bool; onPick(uid)
@@ -278,6 +323,10 @@ Screens.Opened:Connect(function(name)
 	end
 end)
 
+step("tutorial", function()
+	Tutorial.start(ctx)
+end)
+
 -- Stations in the hub world
 step("stations", function()
 	ProximityPromptService.PromptTriggered:Connect(function(prompt, who)
@@ -285,10 +334,37 @@ step("stations", function()
 			return
 		end
 		local screen = prompt.Parent and prompt.Parent:GetAttribute("Screen")
-		if type(screen) == "string" then
-			Screens.open(screen)
+		if type(screen) == "string" and Screens.current() ~= screen then
+			ctx.openFeature(screen)
 		end
 	end)
+end)
+
+-- Locked stations say so locally (client-side only; the server world stays unchanged).
+-- Runs in its own thread: waiting for the world must never hold up the rest of the UI.
+task.spawn(step, "station labels", function()
+	local stations = Workspace:WaitForChild("Hub", 10)
+	stations = stations and stations:FindFirstChild("Stations")
+	if not stations then
+		return
+	end
+	local originals = {}
+	local function refreshStations()
+		for _, prompt in stations:GetDescendants() do
+			if prompt:IsA("ProximityPrompt") then
+				local screen = prompt.Parent and prompt.Parent:GetAttribute("Screen")
+				originals[prompt] = originals[prompt] or { action = prompt.ActionText }
+				local locked = type(screen) == "string"
+					and Features.ById[screen] ~= nil
+					and not Features.isUnlocked(State.profile, screen)
+				prompt.ActionText = if locked
+					then "Locked: " .. Features.requirement(screen)
+					else originals[prompt].action
+			end
+		end
+	end
+	refreshStations()
+	State.onKeys({ "stages", "stats" }, refreshStations)
 end)
 
 -- ---------------------------------------------------------------- companion
@@ -307,115 +383,19 @@ step("companion", function()
 end)
 
 -- ---------------------------------------------------------------- battle playback
-local Battle = ScreenModules.Battle
-local Stages = ScreenModules.Stages
-
-local function resultActions(payload)
-	local actions = {}
-	local function closeBattle()
-		BattleStage.stop()
-		Screens.close()
-	end
-	if payload.mode == "Stage" and Stages.current then
-		local zone, stage = Stages.current()
-		local won = payload.winner == "A"
-		if won then
-			table.insert(actions, {
-				text = "Next",
-				color = Theme.Colors.good,
-				fn = function()
-					BattleStage.stop()
-					local nextStage, nextZone = stage + 1, zone
-					if nextStage > StagesConfig.STAGES_PER_ZONE then
-						nextStage, nextZone = 1, zone + 1
-					end
-					Screens.open("Stages", { zone = nextZone, stage = nextStage })
-				end,
-			})
-		end
-		table.insert(actions, {
-			text = won and "Again" or "Retry",
-			color = Theme.Colors.info,
-			fn = function()
-				local ok, err = Net.invoke("StartStage", zone, stage)
-				if not ok then
-					ctx.toast(err, "bad")
-					closeBattle()
-				end
-			end,
-		})
-		table.insert(actions, {
-			text = "Stages",
-			color = Theme.Colors.panelLight,
-			fn = function()
-				BattleStage.stop()
-				Screens.open("Stages", { zone = zone, stage = stage })
-			end,
-		})
-	elseif payload.mode == "Arena" then
-		table.insert(actions, {
-			text = "Arena",
-			color = Theme.Colors.info,
-			fn = function()
-				BattleStage.stop()
-				Screens.open("Arena")
-			end,
-		})
-	elseif payload.mode == "Expedition" then
-		table.insert(actions, {
-			text = "Map",
-			color = Theme.Colors.info,
-			fn = function()
-				BattleStage.stop()
-				Screens.open("Expedition")
-			end,
-		})
-	end
-	table.insert(actions, { text = "Close", color = Theme.Colors.panelLight, fn = closeBattle })
-	return actions
-end
-
-local function playBattle(payload)
-	if type(payload) ~= "table" or not payload.teamA or not payload.teamB then
-		return
-	end
-	local settings = (State.profile and State.profile.settings) or {}
-	Screens.open("Battle")
-	local battleUi = nil
-	local ctl = BattleStage.play(payload, {
-		speed = settings.battleSpeed or 1,
-		onHp = function(uid, hp, shield)
-			if battleUi then
-				battleUi.onHp(uid, hp, shield)
-			end
-		end,
-		onLog = function(text, kind)
-			if battleUi then
-				battleUi.onLog(text, kind)
-			end
-		end,
-		onFinished = function()
-			if battleUi then
-				battleUi.showResult()
-			end
-		end,
-	})
-	battleUi = Battle.show(ctx, payload, ctl, resultActions(payload))
-	if settings.autoSkip then
-		task.defer(function()
-			ctl.skip()
-		end)
-	end
-end
-
 step("battle playback", function()
-	Net.on("BattleResult", function(payload)
-		if not step("battle", playBattle, payload) then
-			BattleStage.stop()
-			Screens.close()
-			ctx.toast("The battle replay failed to load", "bad")
-		end
-	end)
+	BattleFlow.start({
+		ctx = ctx,
+		Screens = Screens,
+		BattleStage = BattleStage,
+		Battle = ScreenModules.Battle,
+		Stages = ScreenModules.Stages,
+		StagesConfig = StagesConfig,
+		Net = Net,
+		State = State,
+		Theme = Theme,
+		step = step,
+	})
 end)
 
 -- ---------------------------------------------------------------- server events
@@ -466,15 +446,15 @@ step("save mode banner", function()
 	end
 	C.label({
 		Name = "TestModeBanner",
-		Size = UDim2.fromOffset(330, 20),
-		Position = UDim2.new(0.5, 0, 0, 2),
-		AnchorPoint = Vector2.new(0.5, 0),
+		Size = UDim2.fromOffset(250, 18),
+		Position = UDim2.new(1, -60, 0, 8),
+		AnchorPoint = Vector2.new(1, 0),
 		BackgroundTransparency = 0.15,
 		BackgroundColor3 = Theme.Colors.bad,
-		Text = "TEST MODE - progress is not saved",
-		TextSize = 9,
+		Text = "TEST MODE: not saved",
+		TextSize = 8,
 		TextXAlignment = Enum.TextXAlignment.Center,
-		ZIndex = 80,
+		ZIndex = 0, -- beneath open screens
 		Parent = gui,
 	})
 end)
@@ -483,25 +463,20 @@ end)
 step("build label", function()
 	C.label({
 		Name = "BuildLabel",
-		Size = UDim2.fromOffset(260, 14),
-		Position = UDim2.new(1, -266, 1, -16),
+		Size = UDim2.fromOffset(300, 12),
+		Position = UDim2.new(1, -60, 0, 30),
+		AnchorPoint = Vector2.new(1, 0),
 		Text = BUILD_TEXT,
 		TextSize = 7,
 		TextTransparency = 0.35,
 		TextColor3 = Theme.Colors.textDim,
 		TextXAlignment = Enum.TextXAlignment.Right,
-		ZIndex = 5,
+		ZIndex = 0, -- beneath open screens
 		Parent = gui,
 	})
 end)
 
--- Daily reminder
-task.delay(3, function()
-	local p = State.profile
-	if p and p.stats and p.stats.lastDailyClaim ~= os.date("!%Y-%m-%d") then
-		ctx.toast("Daily reward available - open Quests", "info")
-	end
-end)
+-- (Daily reward reminders are a "!" badge on Quests in the dock - no popup on join.)
 
 if degraded then
 	ctx.toast("Some features are unavailable right now", "bad")

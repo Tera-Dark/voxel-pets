@@ -6,6 +6,7 @@ local Shared = ReplicatedStorage.Shared
 local Pets = require(Shared.Config.Pets)
 local Skills = require(Shared.Config.Skills)
 local Stages = require(Shared.Config.Stages)
+local PixelIcons = require(script.Parent.Parent.PixelIcons)
 local Elements = require(Shared.Config.Elements)
 local Builder = require(Shared.Combat.Builder)
 local Formulas = require(Shared.Config.Formulas)
@@ -34,11 +35,12 @@ local function refresh(ctx)
 	for i, z in Stages.Zones do
 		local unlocked = Stages.isZoneUnlocked(z.id, p.stages)
 		local b = C.button({
+			Name = "ZoneTab" .. z.id,
 			Size = UDim2.fromOffset(200, 30),
-			Text = z.displayName .. (unlocked and "" or " (locked)"),
+			Text = (if unlocked then "" else "    ") .. z.displayName,
 			LayoutOrder = i,
 			BackgroundColor3 = z.id == zone and Theme.Colors.info or Theme.Colors.panelLight,
-			TextSize = 10,
+			TextSize = 9,
 			Parent = ui.tabs,
 		}, function()
 			zone = z.id
@@ -46,6 +48,9 @@ local function refresh(ctx)
 			refresh(ctx)
 		end)
 		C.setEnabled(b, unlocked)
+		if not unlocked then
+			PixelIcons.new("lock", 20, { Position = UDim2.fromOffset(10, 5), Parent = b })
+		end
 	end
 	for _, child in ui.grid:GetChildren() do
 		if child:IsA("TextButton") then
@@ -63,7 +68,10 @@ local function refresh(ctx)
 				zone,
 				s,
 				kind == "Normal" and "" or kind:upper(),
-				unlocked and (string.rep("*", stars) .. string.rep("-", 3 - stars)) or "LOCKED"
+				if not unlocked
+					then "LOCKED"
+					elseif stars == 0 then "NEW"
+					else string.rep("*", stars) .. string.rep("-", 3 - stars)
 			),
 			LayoutOrder = s,
 			BackgroundColor3 = s == stage and Theme.Colors.info
@@ -135,7 +143,13 @@ local function refresh(ctx)
 	end
 	ui.preview.Text = table.concat(lines, "\n")
 	ui.fight.Text = "FIGHT " .. zone .. "-" .. stage
-	C.setEnabled(ui.fight, Stages.isStageUnlocked(zone, stage, p.stages) and mine ~= nil)
+	local stageOpen = Stages.isStageUnlocked(zone, stage, p.stages)
+	C.setEnabled(ui.fight, stageOpen and mine ~= nil)
+	-- a disabled button always says why
+	ui.fightHint.Text = if mine == nil
+		then "Pick an active pet first (Pets)."
+		elseif not stageOpen then "Clear the previous stage first."
+		else ""
 end
 
 function Screen.build(host, ctx)
@@ -169,6 +183,7 @@ function Screen.build(host, ctx)
 		Parent = root,
 	})
 	ui.fight = C.button({
+		Name = "FightButton",
 		Size = UDim2.fromOffset(300, 48),
 		Position = UDim2.new(1, -316, 0, 84),
 		Text = "FIGHT",
@@ -183,9 +198,19 @@ function Screen.build(host, ctx)
 			C.setEnabled(ui.fight, true)
 		end
 	end)
+	ui.fightHint = C.label({
+		Name = "FightHint",
+		Size = UDim2.fromOffset(300, 18),
+		Position = UDim2.new(1, -316, 0, 136),
+		Text = "",
+		TextSize = 8,
+		TextColor3 = Theme.Colors.accent,
+		TextXAlignment = Enum.TextXAlignment.Center,
+		Parent = root,
+	})
 	C.label({
 		Size = UDim2.fromOffset(300, 80),
-		Position = UDim2.new(1, -316, 0, 140),
+		Position = UDim2.new(1, -316, 0, 160),
 		Text = "Fully automatic combat. Pick the right element, level up, or bring relics from expeditions. Stars: clear / finish above 50% HP / finish under 30s.",
 		TextSize = 8,
 		TextColor3 = Theme.Colors.textDim,

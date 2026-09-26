@@ -9,6 +9,7 @@ local Rarities = require(Shared.Config.Rarities)
 local Formulas = require(Shared.Config.Formulas)
 
 local Screen = {}
+local FREE_EGG = "MeadowEgg" -- profile.freeHatches applies to this egg (HatchService.FREE_EGG)
 local ui = {}
 local EGG_ORDER = { "MeadowEgg", "ForestEgg", "VolcanoEgg", "PremiumEgg" }
 
@@ -190,12 +191,14 @@ local function refresh(ctx)
 			Screen.showOdds(ctx, eggId)
 		end)
 		local available = ok and odds.available
-		local canAfford = available and (p[egg.price.currency] or 0) >= egg.price.amount
+		local free = eggId == FREE_EGG and (p.freeHatches or 0) > 0
+		local canAfford = available and (free or (p[egg.price.currency] or 0) >= egg.price.amount)
 		local b1 = C.button({
+			Name = if free then "HatchFree" else "Hatch1_" .. eggId,
 			Size = UDim2.new(1, -16, 0, 28),
 			Position = UDim2.new(0, 8, 1, -68),
-			Text = "Hatch x1",
-			BackgroundColor3 = Theme.Colors.good,
+			Text = if free then "Hatch x1 (FREE)" else "Hatch x1",
+			BackgroundColor3 = if free then Theme.Colors.accent else Theme.Colors.good,
 			TextSize = 10,
 			Parent = card,
 		}, function()
@@ -285,11 +288,14 @@ function Screen.build(host, ctx)
 	}, function()
 		ctx.Screens.close()
 	end)
-	ctx.State.onKeys({ "coins", "gems", "luckCharges", "passes", "stages" }, function()
-		if root.Visible then
-			refresh(ctx)
+	ctx.State.onKeys(
+		{ "coins", "gems", "luckCharges", "passes", "stages", "freeHatches" },
+		function()
+			if root.Visible then
+				refresh(ctx)
+			end
 		end
-	end)
+	)
 	return root
 end
 

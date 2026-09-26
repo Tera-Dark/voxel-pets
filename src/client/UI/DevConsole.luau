@@ -180,8 +180,8 @@ function DevConsole.mount(playerGui)
 
 	local panel = C.panel({
 		Size = UDim2.fromScale(0.62, 0.6),
-		Position = UDim2.new(0, 8, 1, -42),
-		AnchorPoint = Vector2.new(0, 1),
+		Position = UDim2.new(0.5, 0, 0, 32),
+		AnchorPoint = Vector2.new(0.5, 0),
 		Visible = false,
 		Parent = gui,
 	}, "Developer log")
@@ -222,8 +222,8 @@ function DevConsole.mount(playerGui)
 		panel.Visible = false
 	end)
 	local badge = C.button({
-		Size = UDim2.fromOffset(96, 28),
-		Position = UDim2.new(0, 8, 1, -36),
+		Size = UDim2.fromOffset(96, 22),
+		Position = UDim2.new(0.5, -48, 0, 4),
 		Text = "LOG",
 		TextSize = 10,
 		BackgroundColor3 = Theme.Colors.bad,

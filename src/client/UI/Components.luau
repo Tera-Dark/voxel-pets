@@ -224,6 +224,21 @@ function C.scroll(props)
 	return s
 end
 
+-- Open modals, newest last (Esc closes the top-most one first: C.closeTopModal()).
+local modalStack = {}
+
+function C.closeTopModal(): boolean
+	for i = #modalStack, 1, -1 do
+		local overlay = modalStack[i]
+		table.remove(modalStack, i)
+		if overlay.Parent then
+			overlay:Destroy()
+			return true
+		end
+	end
+	return false
+end
+
 -- Full-screen modal window; returns the content frame and a close() function.
 function C.modal(parent, title, size)
 	local overlay = C.frame({
@@ -261,6 +276,7 @@ function C.modal(parent, title, size)
 		overlay:Destroy()
 	end)
 	closeBtn.ZIndex = 53
+	table.insert(modalStack, overlay)
 	return content, function()
 		if overlay.Parent then
 			overlay:Destroy()
@@ -275,7 +291,7 @@ function C.toast(parent, text, kind)
 		toastHost = C.frame({
 			Name = "Toasts",
 			Size = UDim2.fromOffset(420, 200),
-			Position = UDim2.new(0.5, 0, 1, -40),
+			Position = UDim2.new(0.5, 0, 1, -150), -- above the dock / action bar
 			AnchorPoint = Vector2.new(0.5, 1),
 			BackgroundTransparency = 1,
 			ZIndex = 90,
