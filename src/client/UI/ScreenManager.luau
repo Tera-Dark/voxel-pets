@@ -2,7 +2,9 @@
 -- One main screen at a time. Screens are modules: { build(host, ctx) -> frame, onOpen?(frame, arg), onClose?(frame) }
 -- Failure isolation: a screen whose build() throws is replaced by an error panel (and logged to
 -- the dev log); a throwing onOpen/onClose shows a toast. Other screens keep working.
+-- Every window gets a close button (touch has no Esc) and a small pop-in animation.
 local UserInputService = game:GetService("UserInputService")
+local TweenService = game:GetService("TweenService")
 
 local ScreenManager = {}
 local screens = {} -- name -> { module, frame, failed }
@@ -78,10 +80,34 @@ function ScreenManager.init(hostFrame, context)
 end
 
 -- Scales a screen panel down (never up) so it fits the logical canvas with a margin.
+-- Close button top-right (created once per frame; full-screen screens like Battle skip it).
+local function ensureClose(frame)
+	if frame.Size.X.Scale >= 0.99 and frame.Size.Y.Scale >= 0.99 then
+		return -- full-screen (e.g. Battle): it manages its own controls
+	end
+	if frame:FindFirstChild("ScreenClose") then
+		return
+	end
+	ctx.C.button({
+		Name = "ScreenClose",
+		Size = UDim2.fromOffset(30, 26),
+		Position = UDim2.new(1, -34, 0, 2),
+		Text = "X",
+		TextSize = 10,
+		BackgroundColor3 = ctx.Theme.Colors.bad,
+		ZIndex = 25,
+		Parent = frame,
+	}, function()
+		ScreenManager.close()
+	end)
+end
+
+-- Fits big panels into small canvases and pops the window in (Back easing, ~0.15 s).
 local function fit(frame)
 	if not (ctx and ctx.canvasSize) or not frame:IsA("GuiObject") then
 		return
 	end
+	ensureClose(frame) -- every window gets an X (phones have no Esc)
 	local w, h = frame.Size.X.Offset, frame.Size.Y.Offset
 	if frame.Size.X.Scale > 0 or frame.Size.Y.Scale > 0 or w <= 0 or h <= 0 then
 		return -- full-screen / scale-sized screens already fit
@@ -95,6 +121,13 @@ local function fit(frame)
 		scaler.Parent = frame
 	end
 	scaler.Scale = math.max(0.5, s)
+	-- pop-in juice (also runs at scale 1: one UIScale does both jobs)
+	scaler.Scale = math.max(0.5, s) * 0.92
+	TweenService:Create(
+		scaler,
+		TweenInfo.new(0.16, Enum.EasingStyle.Back, Enum.EasingDirection.Out),
+		{ Scale = math.max(0.5, s) }
+	):Play()
 end
 
 function ScreenManager.refit()

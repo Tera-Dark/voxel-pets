@@ -63,6 +63,42 @@ function C.stroke(parent, color, thickness)
 	})
 end
 
+-- Pixel 3D bevel (D-26): dark outline, light top/left edges, dark bottom/right edges. The edge
+-- frames are scale-anchored, so they follow any size. Gives windows and buttons a chunky, warm,
+-- hand-crafted look without image assets.
+function C.bevel(inst, base: Color3?)
+	base = base or inst.BackgroundColor3
+	C.stroke(inst, Colors.border, 2)
+	local hi, sh = Theme.hilite(base), Theme.shadow(base)
+	local function edge(name, color, props)
+		local e = C.new("Frame", props)
+		e.Name = name
+		e.BackgroundColor3 = color
+		e.BorderSizePixel = 0
+		e.Parent = inst
+		return e
+	end
+	edge("BevelTop", hi, {
+		Position = UDim2.fromOffset(2, 2),
+		Size = UDim2.new(1, -4, 0, 2),
+	})
+	edge("BevelLeft", hi, {
+		Position = UDim2.fromOffset(2, 2),
+		Size = UDim2.new(0, 2, 1, -4),
+	})
+	edge("BevelRight", sh, {
+		AnchorPoint = Vector2.new(1, 0),
+		Position = UDim2.new(1, -2, 0, 2),
+		Size = UDim2.new(0, 3, 1, -4),
+	})
+	edge("BevelBottom", sh, {
+		AnchorPoint = Vector2.new(0, 1),
+		Position = UDim2.new(0, 2, 1, -2),
+		Size = UDim2.new(1, -4, 0, 3),
+	})
+	return inst
+end
+
 function C.padding(parent, px)
 	px = px or Theme.Pad
 	return C.new("UIPadding", {
@@ -102,21 +138,36 @@ function C.frame(props)
 	return f
 end
 
--- Panel with the chunky pixel border + optional title bar.
+-- Panel: wooden window with a pixel bevel; optional wooden title bar with gold trim.
 function C.panel(props, title)
 	local f = C.frame(props)
-	C.stroke(f)
+	C.bevel(f)
 	if title then
-		C.new("TextLabel", {
+		local barF = C.new("Frame", {
 			Name = "Title",
 			Size = UDim2.new(1, 0, 0, 30),
-			BackgroundColor3 = Colors.panelLight,
+			BackgroundColor3 = Colors.panelDark,
 			BorderSizePixel = 0,
+			Parent = f,
+		})
+		C.new("TextLabel", {
+			Name = "Text",
+			Size = UDim2.new(1, -12, 1, 0),
+			Position = UDim2.fromOffset(6, 0),
+			BackgroundTransparency = 1,
 			Text = title,
 			TextColor3 = Colors.accent,
 			FontFace = Theme.font(),
 			TextSize = 14,
-			Parent = f,
+			Parent = barF,
+		})
+		C.new("Frame", {
+			Name = "Trim",
+			Size = UDim2.new(1, 0, 0, 2),
+			Position = UDim2.new(0, 0, 1, -2),
+			BackgroundColor3 = Colors.borderLight,
+			BorderSizePixel = 0,
+			Parent = barF,
 		})
 	end
 	return f
@@ -147,7 +198,7 @@ function C.button(props, onClick)
 		Text = "Button",
 	})
 	apply(b, props)
-	C.stroke(b)
+	C.bevel(b)
 	local base = b.BackgroundColor3
 	b.MouseEnter:Connect(function()
 		if b.Active then
@@ -157,9 +208,19 @@ function C.button(props, onClick)
 	b.MouseLeave:Connect(function()
 		b.BackgroundColor3 = base
 	end)
+	-- chunky press feedback: darken for a beat, then restore
+	local function pressFx()
+		b.BackgroundColor3 = Theme.shadow(base)
+		task.delay(0.09, function()
+			if b.Parent then
+				b.BackgroundColor3 = base
+			end
+		end)
+	end
 	if onClick then
 		b.Activated:Connect(function()
 			if b.Active then
+				pressFx()
 				onClick()
 			end
 		end)
@@ -183,12 +244,31 @@ end
 function C.bar(props, color, backColor)
 	local outer = C.frame({ BackgroundColor3 = backColor or Colors.hpBack })
 	apply(outer, props)
-	C.stroke(outer, Colors.border, 2)
+	C.bevel(outer)
 	local fill = C.frame({
 		BackgroundColor3 = color or Colors.hp,
 		Size = UDim2.fromScale(1, 1),
 		Parent = outer,
 	})
+	C.frame({ -- glossy top line on the fill
+		Name = "Gloss",
+		Size = UDim2.new(1, 0, 0, 1),
+		BackgroundColor3 = Color3.new(1, 1, 1),
+		BackgroundTransparency = 0.72,
+		BorderSizePixel = 0,
+		Parent = fill,
+	})
+	for i = 1, 7 do -- pixel segment notches
+		C.new("Frame", {
+			Name = "Seg" .. i,
+			BackgroundColor3 = Colors.border,
+			BackgroundTransparency = 0.3,
+			BorderSizePixel = 0,
+			Position = UDim2.fromScale(i / 8, 0),
+			Size = UDim2.new(0, 2, 1, 0),
+			Parent = outer,
+		})
+	end
 	local text = C.label({
 		Size = UDim2.fromScale(1, 1),
 		TextXAlignment = Enum.TextXAlignment.Center,
@@ -369,7 +449,7 @@ function C.currency(parent, currency, value, order)
 		LayoutOrder = order or 0,
 		Parent = parent,
 	})
-	C.stroke(f, Colors.border, 2)
+	C.bevel(f)
 	local dot = C.frame({
 		Size = UDim2.fromOffset(12, 12),
 		Position = UDim2.fromOffset(7, 7),
