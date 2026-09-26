@@ -25,12 +25,20 @@ function Signal:Connect(fn)
 	end
 	return conn
 end
+local ACTIVE_SCHEDULER = nil -- set by Mock.new({ scheduler = true })
 function Signal:Fire(...)
 	for _, fn in table.clone(self.handlers) do
-		fn(...)
+		if ACTIVE_SCHEDULER then
+			ACTIVE_SCHEDULER:spawn(fn, ...)
+		else
+			fn(...)
+		end
 	end
 end
 Mock.Signal = Signal
+
+-- Virtual-time scheduler (tools/mock/scheduler.luau): opt-in via Mock.new(root, { scheduler = true }).
+local Scheduler = require("./mock/scheduler")
 
 -- ---------------------------------------------------------------- instance tree from disk
 -- Builds { Name, Parent, children..., __path } nodes mirroring src/ so `script.Parent.X` works.
@@ -50,6 +58,10 @@ local function node(name, path, parent)
 	})
 end
 
+-- Module sources are read up front: fs.readFile is async in Lune and would yield out of the
+-- scheduler's coroutines if modules were first required inside a task.
+local SOURCES = {}
+
 local function buildTree(dir, name, parent)
 	local n = node(name, nil, parent)
 	for _, entry in fs.readDir(dir) do
@@ -61,22 +73,31 @@ local function buildTree(dir, name, parent)
 				entry:gsub("%.server%.luau$", ""):gsub("%.client%.luau$", ""):gsub("%.luau$", "")
 			local child = node(modName, full, n)
 			n.__children[modName] = child
+			SOURCES[full] = fs.readFile(full)
 		end
 	end
 	return n
 end
 
 -- ---------------------------------------------------------------- Roblox-ish globals
+-- Enum items are cached so `x == Enum.A.B` comparisons work; Mock.Enum is the same proxy the
+-- loaded modules see (tests use it to fire typed signals such as LogService.MessageOut).
+local ENUM = setmetatable({}, {
+	__index = function(enums, enumName)
+		local items = setmetatable({}, {
+			__index = function(t, item)
+				local v = { Name = item, EnumType = enumName }
+				rawset(t, item, v)
+				return v
+			end,
+		})
+		rawset(enums, enumName, items)
+		return items
+	end,
+})
+Mock.Enum = ENUM
 local function enumProxy()
-	return setmetatable({}, {
-		__index = function(_, enumName)
-			return setmetatable({}, {
-				__index = function(_, item)
-					return { Name = item, EnumType = enumName }
-				end,
-			})
-		end,
-	})
+	return ENUM
 end
 
 local function instanceNew(className)
@@ -103,8 +124,15 @@ end
 function Mock.newPlayer(userId, name)
 	local p =
 		{ UserId = userId, Name = name, DisplayName = name, kicked = nil, ClassName = "Player" }
+	p.attributes = {}
 	function p:Kick(reason)
 		self.kicked = reason or "kicked"
+	end
+	function p:SetAttribute(k, v)
+		self.attributes[k] = v
+	end
+	function p:GetAttribute(k)
+		return self.attributes[k]
 	end
 	return p
 end
@@ -127,12 +155,21 @@ local function reconcile(target, template)
 	end
 end
 
-local function fakeProfileStore()
-	local PS = { saved = {} }
+local function fakeProfileStore(M)
+	-- Knobs: DataStoreState (what ProfileStore's Studio probe concluded), hang (StartSessionAsync
+	-- blocks until cleared; scheduler mode only). Counters: started / ended sessions, stores.
+	local PS = { saved = {}, DataStoreState = "Access", hang = false, started = 0, ended = 0 }
+	PS.stores = {}
 	function PS.New(storeName, template)
 		local store = { Name = storeName, template = template }
 		store.Mock = store
+		table.insert(PS.stores, storeName)
 		function store:StartSessionAsync(key)
+			PS.started += 1
+			while PS.hang do
+				assert(M.scheduler, "fake ProfileStore hang needs { scheduler = true }")
+				M.scheduler:wait(1)
+			end
 			local data = PS.saved[key] and deepCopy(PS.saved[key]) or deepCopy(template)
 			local profile = { Data = data, Key = key, OnSessionEnd = Signal.new(), active = true }
 			function profile:AddUserId() end
@@ -143,6 +180,7 @@ local function fakeProfileStore()
 				return self.active
 			end
 			function profile:EndSession()
+				PS.ended += 1
 				self.active = false
 				PS.saved[key] = deepCopy(self.Data)
 				self.OnSessionEnd:Fire()
@@ -155,7 +193,10 @@ local function fakeProfileStore()
 end
 
 -- ---------------------------------------------------------------- environment / loader
-function Mock.new(rootDir)
+-- opts: scheduler (bool, virtual-time coroutines), studio (default true), placeId (default 4242,
+-- i.e. published; 0 = unpublished .rbxl)
+function Mock.new(rootDir, opts)
+	opts = opts or {}
 	local M = {}
 	local shared = buildTree(rootDir .. "/src/shared", "Shared", nil)
 	local server = buildTree(rootDir .. "/src/server", "Server", nil)
@@ -163,8 +204,13 @@ function Mock.new(rootDir)
 	M.players = {}
 	M.time = os.time()
 	M.startTime = M.time
+	M.clock = 0 -- virtual monotonic seconds (scheduler mode)
 	M.remotes = { functions = {}, events = {} }
-	M.profileStore = fakeProfileStore()
+	M.scheduler = if opts.scheduler then Scheduler.new(M) else nil
+	ACTIVE_SCHEDULER = M.scheduler
+	M.profileStore = fakeProfileStore(M)
+	M.broken = {} -- [absPath] = message: loading that module throws (failure injection)
+	local attributes = {}
 
 	local Players = {
 		PlayerAdded = Signal.new(),
@@ -184,6 +230,12 @@ function Mock.new(rootDir)
 	end
 
 	local ReplicatedStorage = { Name = "ReplicatedStorage", Shared = shared }
+	function ReplicatedStorage:SetAttribute(k, v)
+		attributes[k] = v
+	end
+	function ReplicatedStorage:GetAttribute(k)
+		return attributes[k]
+	end
 	shared.Parent = ReplicatedStorage
 
 	local services = {
@@ -191,9 +243,10 @@ function Mock.new(rootDir)
 		ReplicatedStorage = ReplicatedStorage,
 		RunService = {
 			IsStudio = function()
-				return true
+				return opts.studio ~= false
 			end,
 		},
+		LogService = { MessageOut = Signal.new() },
 		TextService = {
 			FilterStringAsync = function(_, text)
 				return {
@@ -232,7 +285,12 @@ function Mock.new(rootDir)
 	}
 	M.services = services
 
-	local game = { JobId = "mock-job" }
+	local game = {
+		JobId = "mock-job",
+		PlaceId = if opts.placeId ~= nil then opts.placeId else 4242,
+		CreatorId = 1,
+		CreatorType = "User",
+	}
 	function game:GetService(name)
 		return services[name] or error("mock has no service " .. name)
 	end
@@ -249,6 +307,22 @@ function Mock.new(rootDir)
 			Instance = {
 				new = function(className)
 					local inst = instanceNew(className)
+					if className == "RemoteEvent" then
+						-- let a connected client mock (tools/client_mock) receive server events
+						local fireClient, fireAll = inst.FireClient, inst.FireAllClients
+						function inst:FireClient(player, ...)
+							fireClient(self, player, ...)
+							if M.onFire then
+								M.onFire(rawget(self, "Name"), player, table.pack(...))
+							end
+						end
+						function inst:FireAllClients(...)
+							fireAll(self, ...)
+							if M.onFire then
+								M.onFire(rawget(self, "Name"), nil, table.pack(...))
+							end
+						end
+					end
 					if className == "RemoteFunction" or className == "RemoteEvent" then
 						-- registered by name once Name is assigned; we hook via __newindex
 						return setmetatable(inst, {
@@ -281,34 +355,52 @@ function Mock.new(rootDir)
 					return r
 				end,
 			},
-			task = {
-				spawn = function(fn, ...)
-					local ok, err = pcall(fn, ...)
-					if not ok and not tostring(err):find("mock: task.wait") then
-						warn("[mock task.spawn] " .. tostring(err))
-					end
-				end,
-				defer = function(fn, ...)
-					local ok, err = pcall(fn, ...)
-					if not ok then
-						warn("[mock task.defer] " .. tostring(err))
-					end
-				end,
-				delay = function(_, fn, ...)
-					local ok, err = pcall(fn, ...)
-					if not ok then
-						warn("[mock task.delay] " .. tostring(err))
-					end
-				end,
-				wait = function()
-					error("mock: task.wait in a loop is not supported (loops are skipped)")
-				end,
-			},
+			task = if M.scheduler
+				then {
+					spawn = function(fn, ...)
+						return M.scheduler:spawn(fn, ...)
+					end,
+					defer = function(fn, ...)
+						return M.scheduler:delay(0, fn, ...)
+					end,
+					delay = function(t, fn, ...)
+						return M.scheduler:delay(t, fn, ...)
+					end,
+					wait = function(t)
+						return M.scheduler:wait(t)
+					end,
+				}
+				else {
+					spawn = function(fn, ...)
+						local ok, err = pcall(fn, ...)
+						if not ok and not tostring(err):find("mock: task.wait") then
+							warn("[mock task.spawn] " .. tostring(err))
+						end
+					end,
+					defer = function(fn, ...)
+						local ok, err = pcall(fn, ...)
+						if not ok then
+							warn("[mock task.defer] " .. tostring(err))
+						end
+					end,
+					delay = function(_, fn, ...)
+						local ok, err = pcall(fn, ...)
+						if not ok then
+							warn("[mock task.delay] " .. tostring(err))
+						end
+					end,
+					wait = function()
+						error("mock: task.wait in a loop is not supported (loops are skipped)")
+					end,
+				},
 			os = {
 				time = function()
 					return M.time
 				end,
 				clock = function()
+					if M.scheduler then
+						return M.clock
+					end
 					return os.clock() + (M.time - M.startTime) -- advance() moves the monotonic clock too
 				end,
 				date = os.date,
@@ -367,7 +459,10 @@ function Mock.new(rootDir)
 		if cache[path] ~= nil then
 			return cache[path]
 		end
-		local source = fs.readFile(path)
+		if M.broken[path] then
+			error(M.broken[path])
+		end
+		local source = SOURCES[path] or fs.readFile(path)
 		local fn = luau.load(source, { debugName = path, environment = makeEnv(nodeFor(path)) })
 		local result = fn()
 		cache[path] = result == nil and false or result
@@ -422,7 +517,34 @@ function Mock.new(rootDir)
 
 	function M.advance(seconds)
 		M.time += seconds
+		if M.scheduler then
+			M.scheduler:runUntil(M.clock + seconds)
+		end
 	end
+
+	-- scheduler mode: run fn as a Roblox-like thread (it may task.wait)
+	function M.spawn(fn, ...)
+		assert(M.scheduler, "M.spawn needs { scheduler = true }")
+		return M.scheduler:spawn(fn, ...)
+	end
+
+	-- Adds a player to Players without firing PlayerAdded (joined before the server booted).
+	function M.addPlayer(userId, name)
+		local p = Mock.newPlayer(userId, name)
+		p.Parent = Players
+		table.insert(M.players, p)
+		return p
+	end
+
+	function M.fireAdded(p)
+		Players.PlayerAdded:Fire(p)
+	end
+
+	function M.breakModule(relPath, message)
+		M.broken[rootDir .. "/" .. relPath] = message or "injected failure"
+	end
+
+	M.attributes = attributes
 
 	return M
 end

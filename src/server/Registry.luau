@@ -1,5 +1,7 @@
 --!nonstrict
 -- Tiny service locator so services can reference each other lazily without require cycles.
+-- Lifecycle (driven by Boot): require all -> Start() all (wire remotes/signals) -> Ready() all
+-- (begin work that needs every service listening, e.g. DataService loading players).
 local Registry = {}
 local services = {}
 local order = {}
@@ -17,16 +19,37 @@ function Registry.get(name: string)
 	return s
 end
 
-function Registry.startAll()
-	for _, name in order do -- registration (require) order, so DataService starts first
+function Registry.has(name: string): boolean
+	return services[name] ~= nil
+end
+
+local function traceback(err)
+	return tostring(err) .. "\n" .. debug.traceback(nil, 2)
+end
+
+-- Calls service[method] in registration order; one failure never stops the others.
+local function runPhase(method: string, onError)
+	for _, name in order do
 		local s = services[name]
-		if type(s.Start) == "function" then
-			local ok, err = pcall(s.Start, s)
+		if type(s[method]) == "function" then
+			local ok, err = xpcall(s[method], traceback, s)
 			if not ok then
-				warn("[Registry] " .. name .. ":Start failed: " .. tostring(err))
+				if onError then
+					onError(name .. ":" .. method, err)
+				else
+					warn("[Registry] " .. name .. ":" .. method .. " failed: " .. tostring(err))
+				end
 			end
 		end
 	end
+end
+
+function Registry.startAll(onError)
+	runPhase("Start", onError)
+end
+
+function Registry.readyAll(onError)
+	runPhase("Ready", onError)
 end
 
 return Registry

@@ -49,9 +49,11 @@ end
 
 -- ---------------------------------------------------------------- handlers
 -- handler(player, ...) -> ok: boolean, err: string?, payload: any?
+local handled = {}
 function Remotes.handle(name: string, handler)
 	local rf = functions[name]
 	assert(rf, "unknown remote function " .. name)
+	handled[name] = true
 	rf.OnServerInvoke = function(player, ...)
 		if not allowed(player, name) then
 			return false, "Slow down"
@@ -70,6 +72,23 @@ function Remotes.handle(name: string, handler)
 		end
 		return table.unpack(results, 2, results.n)
 	end
+end
+
+-- Called once boot is done: a RemoteFunction without OnServerInvoke makes the client's
+-- InvokeServer wait forever (e.g. its service failed to load). Answer those immediately instead.
+-- Returns the names that had no handler (Boot reports them).
+function Remotes.fillMissing(): { string }
+	local missing = {}
+	for name, rf in functions do
+		if not handled[name] then
+			table.insert(missing, name)
+			rf.OnServerInvoke = function()
+				return false, "Unavailable right now"
+			end
+		end
+	end
+	table.sort(missing)
+	return missing
 end
 
 function Remotes.fire(name: string, player, ...)

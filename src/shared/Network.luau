@@ -51,6 +51,7 @@ local Network = {
 
 	Events = {
 		"ProfileDelta", -- (partialTable) merge into client cache
+		"DevLog", -- ({ {t, kind, text, count} }) server warnings/errors, developer clients only
 		"BattleResult", -- (payload) full event log for playback
 		"Announcement", -- (text, kind) global rare-hatch ticker
 		"Toast", -- (text, kind) short notification

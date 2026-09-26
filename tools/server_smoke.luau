@@ -19,29 +19,11 @@ local function check(cond, msg)
 	end
 end
 
--- ---------------------------------------------------------------- boot (mirrors Main.server.luau)
+-- ---------------------------------------------------------------- boot (same path as Main.server.luau)
+local Boot = M.load("src/server/Boot.luau")
+local bootState, bootErrors = Boot.run({ world = false })
+check(bootState == "ready", "server boots cleanly: " .. table.concat(bootErrors, " | "))
 local Registry = M.load("src/server/Registry.luau")
-M.load("src/server/Network/Remotes.luau")
-for _, name in
-	{
-		"DataService",
-		"EconomyService",
-		"PetService",
-		"MonetizationService",
-		"AnnouncementService",
-		"QuestService",
-		"PrestigeService",
-		"BattleService",
-		"StageService",
-		"HatchService",
-		"ExpeditionService",
-		"CampService",
-		"ArenaService",
-	}
-do
-	M.load("src/server/Services/" .. name .. ".luau")
-end
-Registry.startAll()
 
 local Stages = M.load("src/shared/Config/Stages.luau")
 local Pets = M.load("src/shared/Config/Pets.luau")

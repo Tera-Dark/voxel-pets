@@ -22,8 +22,23 @@ local OFFER_TTL = 300
 local K_FACTOR = 32
 local REWARDS = { win = { medals = 10 }, loss = { medals = 2 } }
 
-local byPower = MemoryStoreService:GetSortedMap("ArenaByPower_v1")
-local byRating = MemoryStoreService:GetSortedMap("ArenaByRating_v1")
+local POWER_MAP, RATING_MAP = "ArenaByPower_v1", "ArenaByRating_v1"
+-- MemoryStore handles are created lazily under pcall: GetSortedMap can throw where MemoryStore is
+-- unavailable (e.g. unpublished Studio places), and a module-level throw used to abort server boot.
+-- nil handle => every caller falls back to bots / an empty leaderboard.
+local maps = {}
+local function sortedMap(name: string)
+	local m = maps[name]
+	if m == nil then
+		local ok, res = pcall(MemoryStoreService.GetSortedMap, MemoryStoreService, name)
+		if not ok then
+			warn("[Arena] MemoryStore unavailable, using bots: " .. tostring(res))
+		end
+		m = if ok and res then res else false
+		maps[name] = m
+	end
+	return m or nil
+end
 local offers = {} -- [player] = { list = {...}, expiresAt = t }
 local seeder = Random.new()
 
@@ -57,15 +72,20 @@ function ArenaService.Publish(player)
 		return
 	end
 	local key = tostring(player.UserId)
-	pcall(byPower.SetAsync, byPower, key, snap, INDEX_TTL, snap.power)
-	pcall(
-		byRating.SetAsync,
-		byRating,
-		key,
-		{ name = snap.name, rating = snap.rating, power = snap.power },
-		INDEX_TTL,
-		snap.rating
-	)
+	local byPower, byRating = sortedMap(POWER_MAP), sortedMap(RATING_MAP)
+	if byPower then
+		pcall(byPower.SetAsync, byPower, key, snap, INDEX_TTL, snap.power)
+	end
+	if byRating then
+		pcall(
+			byRating.SetAsync,
+			byRating,
+			key,
+			{ name = snap.name, rating = snap.rating, power = snap.power },
+			INDEX_TTL,
+			snap.rating
+		)
+	end
 end
 
 -- ---------------------------------------------------------------- bots
@@ -126,7 +146,11 @@ function ArenaService.GetOpponents(player)
 		return false, "No pet in your team"
 	end
 	local candidates = {}
+	local byPower = sortedMap(POWER_MAP)
 	local ok, items = pcall(function()
+		if not byPower then
+			error("MemoryStore unavailable")
+		end
 		return byPower:GetRangeAsync(
 			Enum.SortDirection.Ascending,
 			30,
@@ -234,7 +258,11 @@ function ArenaService.Fight(player, index: number): (boolean, string?, any?)
 end
 
 function ArenaService.Leaderboard()
+	local byRating = sortedMap(RATING_MAP)
 	local ok, items = pcall(function()
+		if not byRating then
+			error("MemoryStore unavailable")
+		end
 		return byRating:GetRangeAsync(Enum.SortDirection.Descending, 50)
 	end)
 	local rows = {}
