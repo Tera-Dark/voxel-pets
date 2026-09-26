@@ -63,18 +63,21 @@ function Screen.build(host, ctx)
 		Parent = host,
 	}, "Expedition")
 	ui.start = C.frame({
+		Name = "Start",
 		Size = UDim2.fromOffset(560, 200),
 		Position = UDim2.fromOffset(12, 40),
 		BackgroundTransparency = 1,
 		Parent = root,
 	})
 	ui.map = C.frame({
+		Name = "Map",
 		Size = UDim2.fromOffset(720, 160),
 		Position = UDim2.fromOffset(12, 40),
 		BackgroundTransparency = 1,
 		Parent = root,
 	})
 	ui.pending = C.panel({
+		Name = "Pending",
 		Size = UDim2.fromOffset(640, 230),
 		Position = UDim2.fromOffset(12, 210),
 		Parent = root,
@@ -108,6 +111,7 @@ function Screen.build(host, ctx)
 		"Talents (permanent, cost Marks)"
 	)
 	ui.talents = C.frame({
+		Name = "Talents",
 		Size = UDim2.new(1, -8, 1, -34),
 		Position = UDim2.fromOffset(4, 32),
 		BackgroundTransparency = 1,

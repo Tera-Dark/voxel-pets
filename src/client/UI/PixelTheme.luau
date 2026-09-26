@@ -76,6 +76,11 @@ function Theme.font(): Font
 	return pixelFont or Font.fromEnum(Enum.Font.Arcade)
 end
 
+-- Readable monospace font for logs / diagnostics (pixel fonts are hard to read at length).
+function Theme.monoFont(): Font
+	return Font.fromEnum(Enum.Font.Code)
+end
+
 function Theme.currencyColor(currency: string): Color3
 	return Theme.Colors[currency] or Theme.Colors.text
 end

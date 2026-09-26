@@ -271,8 +271,10 @@ function BattleStage.play(payload, opts)
 		elseif t == "Death" then
 			local m = models[ev.dst]
 			if m then
-				TweenService:Create(m.PrimaryPart, TweenInfo.new(0.4), { Transparency = 0.6 })
-					:Play()
+				if m.PrimaryPart then
+					TweenService:Create(m.PrimaryPart, TweenInfo.new(0.4), { Transparency = 0.6 })
+						:Play()
+				end
 				m:PivotTo(m:GetPivot() * CFrame.Angles(0, 0, math.rad(80)) - Vector3.new(0, 1, 0))
 			end
 			if opts.onLog then
@@ -295,8 +297,13 @@ function BattleStage.play(payload, opts)
 		elapsed += (now - lastTime) * ctl.speed
 		lastTime = now
 		while index <= #events and events[index].t <= elapsed do
-			apply(events[index])
-			index += 1
+			local ev = events[index]
+			index += 1 -- advance first: a throwing event must not replay (and error) every frame
+			local ok, err = pcall(apply, ev)
+			if not ok and not ctl.applyWarned then
+				ctl.applyWarned = true
+				warn("[BattleStage] event " .. tostring(ev.type) .. " failed: " .. tostring(err))
+			end
 		end
 		if index > #events and not ctl.finished then
 			ctl.finished = true

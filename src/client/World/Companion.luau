@@ -70,7 +70,14 @@ function Companion.set(inst)
 	model.Parent = ensureFolder()
 	currentKey = key
 	if not connection then
-		connection = RunService.Heartbeat:Connect(step)
+		connection = RunService.Heartbeat:Connect(function(dt)
+			local ok, err = pcall(step, dt)
+			if not ok then -- never error every frame: stop following and report once
+				connection:Disconnect()
+				connection = nil
+				warn("[Companion] follow step failed: " .. tostring(err))
+			end
+		end)
 	end
 end
 

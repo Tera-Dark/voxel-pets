@@ -1,41 +1,170 @@
 --!nonstrict
--- Client entry point: builds the ScreenGui, waits for the profile, wires screens, stations,
--- battle playback and server events.
+-- Client entry point.
+--   1. Dev log + loading screen come up first (before anything that could fail).
+--   2. Client modules are required under xpcall; a broken screen module becomes an error panel.
+--   3. Handshake connect -> server -> save never waits silently: every stage shows progress, and
+--      diagnostics (server boot state/errors, save state, last error) appear if it takes long.
+--   4. The UI is wired in independent steps so one failing piece cannot take the others down.
 local Players = game:GetService("Players")
 local ProximityPromptService = game:GetService("ProximityPromptService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local StarterGui = game:GetService("StarterGui")
 
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
-
-local Shared = ReplicatedStorage.Shared
-local StagesConfig = require(Shared.Config.Stages)
-
 local Client = script.Parent
-local Net = require(Client.Net)
-local State = require(Client.State)
-local Theme = require(Client.UI.PixelTheme)
-local C = require(Client.UI.Components)
-local Screens = require(Client.UI.ScreenManager)
-local BattleStage = require(Client.World.BattleStage)
-local Companion = require(Client.World.Companion)
-
-local ScreenModules = {
-	HUD = require(Client.UI.Screens.HUD),
-	Battle = require(Client.UI.Screens.Battle),
-	Pets = require(Client.UI.Screens.Pets),
-	Hatch = require(Client.UI.Screens.Hatch),
-	Stages = require(Client.UI.Screens.Stages),
-	Camp = require(Client.UI.Screens.Camp),
-	Expedition = require(Client.UI.Screens.Expedition),
-	Arena = require(Client.UI.Screens.Arena),
-	Codex = require(Client.UI.Screens.Codex),
-	Quests = require(Client.UI.Screens.Quests),
-	Shop = require(Client.UI.Screens.Shop),
-	Prestige = require(Client.UI.Screens.Prestige),
-}
-
 local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
+
+local Theme = require(Client.UI.PixelTheme)
+local C = require(Client.UI.Components)
+local DevConsole = require(Client.UI.DevConsole)
+local BootScreen = require(Client.UI.BootScreen)
+
+DevConsole.start()
+DevConsole.mount(playerGui)
+local boot = BootScreen.new(playerGui)
+
+local function traceback(err)
+	return tostring(err) .. "\n" .. debug.traceback(nil, 2)
+end
+
+-- Runs one independent piece of client setup; failures go to the dev log instead of killing boot.
+local function step(label: string, fn, ...)
+	local ok, err = xpcall(fn, traceback, ...)
+	if not ok then
+		warn("[Client] " .. label .. " failed: " .. tostring(err))
+	end
+	return ok
+end
+
+local function diagnostics(): string
+	local lines = {
+		"server: "
+			.. tostring(ReplicatedStorage:GetAttribute("VP_ServerState") or "no status yet")
+			.. "   stage: "
+			.. tostring(ReplicatedStorage:GetAttribute("VP_BootStage") or "-"),
+		"save: " .. tostring(player:GetAttribute("VP_LoadState") or "no status yet"),
+	}
+	local errs = ReplicatedStorage:GetAttribute("VP_BootErrors")
+	if type(errs) == "string" and errs ~= "" then
+		table.insert(lines, "server problems:\n" .. errs)
+	end
+	local last = DevConsole.lastError()
+	if last then
+		table.insert(lines, "last error (" .. last.source .. "): " .. string.sub(last.text, 1, 300))
+	end
+	return table.concat(lines, "\n")
+end
+
+-- ---------------------------------------------------------------- protected requires
+local core = {}
+local coreOk, coreErr = xpcall(function()
+	local Shared = ReplicatedStorage:WaitForChild("Shared")
+	core.StagesConfig = require(Shared.Config.Stages)
+	core.Net = require(Client.Net)
+	core.State = require(Client.State)
+	core.Screens = require(Client.UI.ScreenManager)
+	core.BattleStage = require(Client.World.BattleStage)
+	core.Companion = require(Client.World.Companion)
+end, traceback)
+if not coreOk then
+	boot:set("connect", "fail", "game scripts failed to load")
+	boot:problem(tostring(coreErr))
+	warn("[Client] core modules failed: " .. tostring(coreErr))
+	return
+end
+local StagesConfig, Net, State, Screens = core.StagesConfig, core.Net, core.State, core.Screens
+local BattleStage, Companion = core.BattleStage, core.Companion
+
+local SCREEN_NAMES = {
+	"HUD",
+	"Battle",
+	"Pets",
+	"Hatch",
+	"Stages",
+	"Camp",
+	"Expedition",
+	"Arena",
+	"Codex",
+	"Quests",
+	"Shop",
+	"Prestige",
+}
+local ScreenModules = {}
+for _, name in SCREEN_NAMES do
+	local ok, mod = xpcall(function()
+		return require(Client.UI.Screens[name])
+	end, traceback)
+	if ok then
+		ScreenModules[name] = mod
+	else
+		warn("[Client] screen " .. name .. " failed to load: " .. tostring(mod))
+		ScreenModules[name] = {
+			build = function()
+				error("screen module failed to load: " .. tostring(mod))
+			end,
+		}
+	end
+end
+
+-- ---------------------------------------------------------------- handshake
+-- 1) connect: the server creates the Remotes folder first thing during boot
+boot:set("connect", "active")
+while not Net.folder(1) do
+	boot:tick()
+	if boot:elapsedSeconds() > 10 then
+		boot:set("connect", "active", "no answer from the server yet")
+		boot:problem(diagnostics())
+	end
+end
+boot:set("connect", "ok")
+DevConsole.attachServer(Net)
+
+-- 2) server services + 3) save
+Net.on("ProfileDelta", function(delta)
+	if type(delta) == "table" then
+		State.apply(delta)
+	end
+end)
+local asking, lastAsk = false, -math.huge
+while not State.loaded do
+	local serverState = ReplicatedStorage:GetAttribute("VP_ServerState")
+	if serverState == "ready" then
+		boot:set("server", "ok")
+	elseif serverState == "degraded" then
+		boot:set("server", "warn", "some systems failed")
+	else
+		boot:set("server", "active", ReplicatedStorage:GetAttribute("VP_BootStage"))
+	end
+	local loadState = player:GetAttribute("VP_LoadState")
+	if loadState == "failed" then
+		boot:set("save", "fail", "your save could not be loaded")
+	elseif loadState == "waiting" then
+		boot:set("save", "active", "waiting for the save service")
+	else
+		boot:set("save", "active")
+	end
+	-- Ask for the profile every few seconds: covers an early call answered "Loading" and any
+	-- missed ProfileDelta. Net.invoke never blocks forever (timeout).
+	if not asking and os.clock() - lastAsk > 3 then
+		asking, lastAsk = true, os.clock()
+		task.spawn(function()
+			local ok, _, profile = Net.invoke("GetProfile")
+			if ok and type(profile) == "table" and not State.loaded then
+				State.apply(profile)
+			end
+			asking = false
+		end)
+	end
+	if boot:elapsedSeconds() > 12 or serverState == "degraded" or loadState == "failed" then
+		boot:problem(diagnostics())
+	end
+	boot:tick()
+	task.wait(0.2)
+end
+local degraded = ReplicatedStorage:GetAttribute("VP_ServerState") == "degraded"
+boot:set("server", if degraded then "warn" else "ok")
+boot:set("save", "ok")
+boot:destroy()
 
 -- ---------------------------------------------------------------- gui root
 local gui = Instance.new("ScreenGui")
@@ -111,71 +240,54 @@ function ctx.openPetPicker(title, filter, onPick)
 	end
 end
 
--- ---------------------------------------------------------------- loading
-local loading = C.label({
-	Size = UDim2.fromScale(1, 1),
-	Text = "Loading your pets...",
-	TextSize = 16,
-	BackgroundTransparency = 0,
-	BackgroundColor3 = Theme.Colors.bg,
-	TextXAlignment = Enum.TextXAlignment.Center,
-	ZIndex = 100,
-	Parent = gui,
-})
-
-Net.on("ProfileDelta", function(delta)
-	State.apply(delta)
-end)
-
--- The server replicates the full profile on load; ask for it too in case we joined late.
-task.spawn(function()
-	local ok, _, profile = Net.invoke("GetProfile")
-	if ok and profile and not State.loaded then
-		State.apply(profile)
+-- ---------------------------------------------------------------- screens + HUD
+step("screens", function()
+	Screens.init(host, ctx)
+	for name, module in ScreenModules do
+		if name ~= "HUD" then
+			Screens.register(name, module)
+		end
 	end
 end)
 
-while not State.loaded do
-	task.wait(0.1)
-end
-loading:Destroy()
-
--- ---------------------------------------------------------------- screens
-Screens.init(host, ctx)
-for name, module in ScreenModules do
-	if name ~= "HUD" then
-		Screens.register(name, module)
-	end
-end
-local hud = ScreenModules.HUD.build(host, ctx)
-hud.ZIndex = 1
-
+local hud = nil
+step("HUD", function()
+	hud = ScreenModules.HUD.build(host, ctx)
+	hud.ZIndex = 1
+end)
 Screens.Opened:Connect(function(name)
 	-- hide the HUD menu while a full-screen battle plays
-	hud.Visible = name ~= "Battle"
+	if hud then
+		hud.Visible = name ~= "Battle"
+	end
 end)
 
 -- Stations in the hub world
-ProximityPromptService.PromptTriggered:Connect(function(prompt, who)
-	if who ~= player then
-		return
-	end
-	local screen = prompt.Parent and prompt.Parent:GetAttribute("Screen")
-	if type(screen) == "string" then
-		Screens.open(screen)
-	end
+step("stations", function()
+	ProximityPromptService.PromptTriggered:Connect(function(prompt, who)
+		if who ~= player then
+			return
+		end
+		local screen = prompt.Parent and prompt.Parent:GetAttribute("Screen")
+		if type(screen) == "string" then
+			Screens.open(screen)
+		end
+	end)
 end)
 
 -- ---------------------------------------------------------------- companion
-local function refreshCompanion()
-	local inst = State.teamPet()
-	Companion.set(inst)
-end
-refreshCompanion()
-State.onKeys({ "team", "pets" }, refreshCompanion)
-player.CharacterAdded:Connect(function()
-	task.wait(0.5)
+step("companion", function()
+	local function refreshCompanion()
+		Companion.set(State.teamPet())
+	end
 	refreshCompanion()
+	State.onKeys({ "team", "pets" }, function()
+		step("companion refresh", refreshCompanion)
+	end)
+	player.CharacterAdded:Connect(function()
+		task.wait(0.5)
+		step("companion respawn", refreshCompanion)
+	end)
 end)
 
 -- ---------------------------------------------------------------- battle playback
@@ -188,7 +300,7 @@ local function resultActions(payload)
 		BattleStage.stop()
 		Screens.close()
 	end
-	if payload.mode == "Stage" then
+	if payload.mode == "Stage" and Stages.current then
 		local zone, stage = Stages.current()
 		local won = payload.winner == "A"
 		if won then
@@ -247,11 +359,11 @@ local function resultActions(payload)
 	return actions
 end
 
-Net.on("BattleResult", function(payload)
+local function playBattle(payload)
 	if type(payload) ~= "table" or not payload.teamA or not payload.teamB then
 		return
 	end
-	local settings = State.profile.settings or {}
+	local settings = (State.profile and State.profile.settings) or {}
 	Screens.open("Battle")
 	local battleUi = nil
 	local ctl = BattleStage.play(payload, {
@@ -278,10 +390,20 @@ Net.on("BattleResult", function(payload)
 			ctl.skip()
 		end)
 	end
+end
+
+step("battle playback", function()
+	Net.on("BattleResult", function(payload)
+		if not step("battle", playBattle, payload) then
+			BattleStage.stop()
+			Screens.close()
+			ctx.toast("The battle replay failed to load", "bad")
+		end
+	end)
 end)
 
 -- ---------------------------------------------------------------- server events
-Net.on("OfflineReport", function(report)
+local function showOfflineReport(report)
 	if type(report) ~= "table" then
 		return
 	end
@@ -313,6 +435,32 @@ Net.on("OfflineReport", function(report)
 		close()
 		Screens.open("Camp")
 	end)
+end
+
+step("offline report", function()
+	Net.on("OfflineReport", function(report)
+		step("offline report popup", showOfflineReport, report)
+	end)
+end)
+
+-- Studio without DataStore access: make it obvious that progress is not saved.
+step("save mode banner", function()
+	if player:GetAttribute("VP_SaveMode") ~= "offline" then
+		return
+	end
+	C.label({
+		Name = "TestModeBanner",
+		Size = UDim2.fromOffset(330, 20),
+		Position = UDim2.new(0.5, 0, 0, 2),
+		AnchorPoint = Vector2.new(0.5, 0),
+		BackgroundTransparency = 0.15,
+		BackgroundColor3 = Theme.Colors.bad,
+		Text = "TEST MODE - progress is not saved",
+		TextSize = 9,
+		TextXAlignment = Enum.TextXAlignment.Center,
+		ZIndex = 80,
+		Parent = gui,
+	})
 end)
 
 -- Daily reminder
@@ -323,4 +471,7 @@ task.delay(3, function()
 	end
 end)
 
+if degraded then
+	ctx.toast("Some features are unavailable right now", "bad")
+end
 print("[VoxelPets] client ready")

@@ -7,19 +7,49 @@ local Theme = require(script.Parent.PixelTheme)
 local C = {}
 local Colors = Theme.Colors
 
+-- Property assignment never throws: a bad key is reported once (dev log) and skipped, so one
+-- typo cannot take a whole screen down. Parent is assigned last. Keys are also validated
+-- statically against the Roblox API dump (scripts/check_roblox_api.py, run in CI).
+local warned = {}
+local function apply(inst, props)
+	local parent = nil
+	for k, v in props or {} do
+		if k == "Parent" then
+			parent = v
+		else
+			local ok, err = pcall(function()
+				inst[k] = v
+			end)
+			if not ok then
+				local id = inst.ClassName .. "." .. tostring(k)
+				if not warned[id] then
+					warned[id] = true
+					warn("[UI] cannot set " .. id .. ": " .. tostring(err))
+				end
+			end
+		end
+	end
+	if parent then
+		inst.Parent = parent
+	end
+	return inst
+end
+C.apply = apply
+
 -- Generic constructor: C.new("Frame", { Size = ..., Parent = ... }, { child1, child2 })
 function C.new(className: string, props, children)
 	local inst = Instance.new(className)
+	local parent = props and props.Parent
 	for k, v in props or {} do
 		if k ~= "Parent" then
-			inst[k] = v
+			apply(inst, { [k] = v })
 		end
 	end
 	for _, child in children or {} do
 		child.Parent = inst
 	end
-	if props and props.Parent then
-		inst.Parent = props.Parent
+	if parent then
+		inst.Parent = parent
 	end
 	return inst
 end
@@ -68,9 +98,7 @@ function C.frame(props)
 		BackgroundColor3 = Colors.panel,
 		BorderSizePixel = 0,
 	})
-	for k, v in props or {} do
-		f[k] = v
-	end
+	apply(f, props)
 	return f
 end
 
@@ -104,9 +132,7 @@ function C.label(props)
 		TextWrapped = true,
 		Text = "",
 	})
-	for k, v in props or {} do
-		l[k] = v
-	end
+	apply(l, props)
 	return l
 end
 
@@ -120,9 +146,7 @@ function C.button(props, onClick)
 		AutoButtonColor = false,
 		Text = "Button",
 	})
-	for k, v in props or {} do
-		b[k] = v
-	end
+	apply(b, props)
 	C.stroke(b)
 	local base = b.BackgroundColor3
 	b.MouseEnter:Connect(function()
@@ -158,9 +182,7 @@ end
 -- Progress bar: returns frame + set(fraction, text?)
 function C.bar(props, color, backColor)
 	local outer = C.frame({ BackgroundColor3 = backColor or Colors.hpBack })
-	for k, v in props or {} do
-		outer[k] = v
-	end
+	apply(outer, props)
 	C.stroke(outer, Colors.border, 2)
 	local fill = C.frame({
 		BackgroundColor3 = color or Colors.hp,
@@ -198,9 +220,7 @@ function C.scroll(props)
 		AutomaticCanvasSize = Enum.AutomaticSize.Y,
 		ScrollingDirection = Enum.ScrollingDirection.Y,
 	})
-	for k, v in props or {} do
-		s[k] = v
-	end
+	apply(s, props)
 	return s
 end
 
