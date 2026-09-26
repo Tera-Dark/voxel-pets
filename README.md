@@ -6,7 +6,7 @@
 
 | 项目 | 状态 |
 |---|---|
-| 当前阶段 | **MVP 代码完成，Studio 实机验证中**（v0.3.0：像素暖木 UI + 竖屏适配；单元 13,149 · 服务端冒烟 169 · 启动鲁棒性 43 · 客户端端到端 165 全部通过） |
+| 当前阶段 | **MVP 代码完成，Studio 实机验证中**（v0.4.0：斗蛐蛐式体素对撞战斗 + 战斗音效；单元 13,149 · 服务端冒烟 169 · 启动鲁棒性 43 · 客户端端到端 171 全部通过；进度导航见 **docs/PROJECT_MAP.md**） |
 | 下一里程碑 | Studio 实机跑通验证清单 → 内部试玩（10 人）→ 表现层补齐 |
 | CI | ![CI](https://github.com/Tera-Dark/voxel-pets/actions/workflows/ci.yml/badge.svg) |
 | 引擎 / 语言 | Roblox Studio · Luau · Rojo |
