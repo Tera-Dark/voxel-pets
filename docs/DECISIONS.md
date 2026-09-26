@@ -22,3 +22,4 @@
 | D-16 | 2026-09-25 | 已定 | 超时处理 | 硬超时判 HP / 狂暴 | **25 s 起每 5 s 全场伤害 +25%** | 杜绝坦克互耗超时；注意该参数强敏感 |
 | D-17 | 2026-09-26 | 已定 | 客户端 UI 技术路线 | Roact/Fusion / 原生 Instance 组件库 | **原生 Instance + 自研极简组件库**（`Components.luau`） | MVP 期零依赖、Lune 无法跑 UI 故越简单越好；界面模块统一 `build/onOpen/onClose` 契约，后续可整体迁移 |
 | D-18 | 2026-09-26 | 已定 | 服务端可测性 | 仅 Studio 手测 / Roblox API Mock 冒烟 | **Mock 冒烟**（`tools/roblox_mock.luau` + `server_smoke`） | 全部服务在 CI 内跑完整玩家旅程；代价是 Mock 与真实 API 行为差异需在 Studio 复核 |
+| D-19 | 2026-09-26 | 已定 | 代码规模与入参校验规范 | 无红线随缘 / 立规执行 | **单文件 ≤500 行（700 强拆）、单函数 ≤80 行；测试按领域分套件；远程入参校验纯逻辑下沉 `shared/Validate`** | 实测巨文件（test 746 / Expedition 561 / Pets 单函数 260）拖慢改动与评审；校验下沉后 Lune 可测、服务零改动；`Simulator` 540 行为单一职责内核，记为有意豁免（见 ARCHITECTURE） |

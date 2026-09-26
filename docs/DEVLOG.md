@@ -4,6 +4,32 @@
 
 ---
 
+## 2026-09-26 · Day 2.5 · 架构体检：超级文件拆分 + 鲁棒性加固
+
+**阶段**：P2 MVP 后整理　**状态**：全部门禁绿（StyLua ✓ · Selene 0 警告 ✓ · 单元测试 13,091/0 ✓ · 服务端冒烟 151/0 ✓ · rojo build ✓）。
+
+### 完成
+- **workspace 整理**：历史 PRD 草稿（v0.1）与未选用概念图移入 `~/artifacts/`；工作区根目录只保留 repo / bundle / 可用 place / 工具链。
+- **超级文件体检与拆分**（报告见 `docs/ARCHITECTURE.md`）：
+  - `tools/test.luau` 746 行测试巨石 → `tools/tests/` 五个领域套件（config / combat / progression / expedition / data）+ 34 行 runner，检查项逐条原样保留；
+  - 客户端 `Expedition` 561 行 → 屏幕编排 143 行 + `UI/ExpeditionView` 429 行纯渲染（act 回调注入）；
+  - 客户端 `Pets` 470 行（单函数 260 行）→ 列表屏 188 行 + `Screens/PetsDetail` 319 行（五个 section 函数）。
+- **鲁棒性加固**：远程入参校验纯逻辑下沉 `src/shared/Validate.luau`（NaN/inf/非整数/越界/空串/控制字符/超长全拒），`Remotes` 委派调用、13 个服务零改动；新增 16 项单测（13,075 → 13,091）。`DataTemplate` 注明 `expedition.lastSummary` 语义字段。
+- **require 约定统一**：客户端 6 处内联 `require(ReplicatedStorage.Shared.X)` 统一为 `Shared` 局部变量约定；修掉 HUD 函数内懒 require（模块顶部一次加载）。
+- 新增 `docs/ARCHITECTURE.md`（分层规则 / require 约定 / 规模红线 D-19 / 鲁棒性约定 / 体检结果表）。
+
+### 问题 / 风险
+- 快照环境会丢可执行位与 `.git/config`（本轮又踩两次：`bin/*`、`install_tools.sh`）；推送改用显式 URL + 全局 credential helper 绕过。
+- 其余风险同 Day 2：待 Studio 实机验证（清单见 README）。
+
+### 下一步
+1. Studio 实机：逐项过 README 验证清单，修 UI / 运行时问题。
+2. 表现层补齐：伤害数字 / 状态图标 / 蓄力条、音效、站点模型替换灰盒。
+3. 第二轮平衡：重点 2 区 5–10 关、3 区 6–10 关的等级跳变。
+4. 埋点 / 反作弊 / 远程配置（P2 剩余项）。
+
+---
+
 ## 2026-09-26 · Day 2 · MVP 代码全量落地（共享层 / 服务端 / 客户端）
 
 **阶段**：P2 MVP（代码完成，等待 Studio 实机验证）　**状态**：PRD §13.1 MVP 范围的全部系统已实现并通过本地门禁；**Roblox 运行时尚未实机跑过**（仅通过 Lune + Roblox API Mock 冒烟）。

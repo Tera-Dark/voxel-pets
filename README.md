@@ -6,7 +6,7 @@
 
 | 项目 | 状态 |
 |---|---|
-| 当前阶段 | **MVP 代码完成，待 Studio 实机验证**（共享层 / 服务端 / 客户端全部落地；13,075 项单元测试 + 151 项服务端冒烟通过） |
+| 当前阶段 | **MVP 代码完成，待 Studio 实机验证**（共享层 / 服务端 / 客户端全部落地；13,091 项单元测试 + 151 项服务端冒烟通过） |
 | 下一里程碑 | Studio 实机跑通验证清单 → 内部试玩（10 人）→ 表现层补齐 |
 | CI | ![CI](https://github.com/Tera-Dark/voxel-pets/actions/workflows/ci.yml/badge.svg) |
 | 引擎 / 语言 | Roblox Studio · Luau · Rojo |
@@ -21,6 +21,7 @@
 | [docs/DEVLOG.md](docs/DEVLOG.md) | **开发推进日志**（按日期记录每一步进展） |
 | [docs/ROADMAP.md](docs/ROADMAP.md) | 里程碑与任务清单（P0 → P4） |
 | [docs/DECISIONS.md](docs/DECISIONS.md) | 设计 / 技术决策记录 |
+| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | 架构说明（分层 / require 约定 / 规模红线 / 鲁棒性约定 / 体检报告） |
 | [docs/concept-art/](docs/concept-art/) | 概念图与美术方向审核记录 |
 
 ## 仓库结构
@@ -45,7 +46,7 @@ voxel-pets/
 # 工具链（Windows/macOS 用 rokit: `rokit install`；Linux/CI 用脚本）
 ./scripts/install_tools.sh ~/bin && export PATH=~/bin:$PATH
 
-lune run tools/test                     # 13,075 项单元测试（共享层）
+lune run tools/test                     # 13,091 项单元测试（tools/tests/ 五套件）
 lune run tools/server_smoke             # 151 项服务端冒烟（Roblox API Mock，完整玩家旅程）
 lune run tools/sim_replay -- Emberfox ThornbackBoar 42 InsightLens   # 单场逐事件日志
 lune run tools/sim_batch -- --quick     # 平衡快照（胜率 / 时长矩阵；去掉 --quick 跑 N=1000）
@@ -57,7 +58,7 @@ rojo build default.project.json -o VoxelPets.rbxl   # 产出可直接在 Studio 
 rojo serve default.project.json         # 或：在 Roblox Studio 中用 Rojo 插件连接
 ```
 
-代码约定：游戏内文本与代码标识符全英文；`src/shared` 不得依赖 Roblox API（保证 Lune 可运行）；模块间使用字符串相对 `require`。
+代码约定：游戏内文本与代码标识符全英文；`src/shared` 不得依赖 Roblox API（保证 Lune 可运行）；模块间使用字符串相对 `require`；文件规模与鲁棒性约定见 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)。
 
 ## 系统总览（MVP）
 
